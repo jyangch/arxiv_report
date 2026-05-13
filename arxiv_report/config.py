@@ -9,6 +9,8 @@ import os
 PREFERRED_PROVIDER = 'claude'  # 'claude' | 'gemini' | 'openai'
 FALLBACK_ORDER = ('claude', 'gemini', 'openai')
 
+CLAUDE_BACKEND = os.getenv('CLAUDE_BACKEND', 'cli')
+
 CLAUDE_API_KEY = os.getenv('CLAUDE_API_KEY', '')
 CLAUDE_MODEL = os.getenv('CLAUDE_MODEL', 'claude-opus-4-6')
 

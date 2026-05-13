@@ -41,7 +41,10 @@ _PROMPT_TEMPLATE = """\
 - 不要包含 <html>/<head>/<body> 标签
 - 不要使用 Markdown
 - 不要使用 ```html``` 等代码围栏
-- 所有物理符号一律使用 Unicode（α、β、γ、ν、ν̄、M⊙、erg s⁻¹、10⁻¹² 等），严禁 LaTeX（$\\alpha$、\\frac{{}}{{}} 等）
+- 物理符号默认使用 Unicode（α、β、γ、ν、ν̄、M⊙、erg s⁻¹、10⁻¹² 等），严禁 LaTeX（$\\alpha$、\\frac{{}}{{}} 等）
+- 非对称误差棒不要用 Unicode 上下标拼接（Unicode 无法垂直堆叠且缺少小数点上下标），必须用 HTML：
+    示例：H₀ = 71.4<span class="errbar"><sup>+13.8</sup><sub>-13.4</sub></span> km s⁻¹ Mpc⁻¹
+- 上下标若含小数点、字母混排或多位数字组合（Unicode 难以干净表达），同样使用 <sup>/<sub>，例如 10<sup>2.5</sup>、χ<sub>eff</sub>
 - 中文翻译保留 GRB、AGN、SN、PSR、FRB、TDE 等约定俗成的英文缩写
 
 报告结构：

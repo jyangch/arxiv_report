@@ -1,11 +1,14 @@
 """LLM provider clients, individual generators, and the fallback dispatcher."""
 
+import subprocess
+
 import anthropic
 from google import genai
 from openai import OpenAI
 
 from arxiv_report.config import (
     CLAUDE_API_KEY,
+    CLAUDE_BACKEND,
     CLAUDE_MODEL,
     FALLBACK_ORDER,
     GEMINI_API_KEY,
@@ -26,7 +29,7 @@ def _is_quota_error(error: Exception) -> bool:
     return ('429' in msg) or ('resource_exhausted' in msg) or ('quota exceeded' in msg)
 
 
-def _generate_with_claude(prompt: str) -> str:
+def _generate_with_claude_api(prompt: str) -> str:
     if not claude_client:
         raise RuntimeError('Claude API key is missing. Set CLAUDE_API_KEY.')
     response = claude_client.messages.create(
@@ -35,6 +38,38 @@ def _generate_with_claude(prompt: str) -> str:
         messages=[{'role': 'user', 'content': prompt}],
     )
     return next(block.text for block in response.content if block.type == 'text')
+
+
+def _generate_with_claude_cli(prompt: str) -> str:
+    """Headless Claude Code CLI: prompt via stdin, sonnet, consumes Max quota.
+
+    ``--tools ""`` disables all built-in tools so the model can only emit
+    text, preventing agentic Bash/Read/Edit loops that stall the call past
+    the timeout. ``--no-session-persistence`` skips writing a session record
+    we never resume. ``--bare`` is intentionally not used: it requires
+    ``ANTHROPIC_API_KEY`` and disables OAuth, which would break Max auth.
+    """
+    result = subprocess.run(
+        [
+            'claude', '-p',
+            '--output-format', 'text',
+            '--model', 'sonnet',
+            '--tools', '',
+            '--no-session-persistence',
+        ],
+        input=prompt,
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=600,
+    )
+    return result.stdout.strip()
+
+
+def _generate_with_claude(prompt: str) -> str:
+    if CLAUDE_BACKEND == 'api':
+        return _generate_with_claude_api(prompt)
+    return _generate_with_claude_cli(prompt)
 
 
 def _generate_with_gemini(prompt: str) -> str:

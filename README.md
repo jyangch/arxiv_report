@@ -16,25 +16,36 @@ Automatically fetches the latest papers from the arXiv `astro-ph.HE` (High Energ
 pip install arxiv pytz anthropic google-genai openai
 ```
 
+For the default Claude CLI backend, also install [Claude Code](https://claude.com/claude-code) and log in once with `claude /login` (choose the Anthropic Console / Pro / Max path).
+
 ## Configuration
 
-Set API keys and models via environment variables (all optional, defaults provided):
+Set API keys, models, and the Claude backend via environment variables (all optional, defaults provided):
 
 | Variable | Description | Default |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | Anthropic Claude API key | — |
-| `CLAUDE_MODEL` | Claude model name | `claude-opus-4-6` |
+| `CLAUDE_BACKEND` | `cli` (consumes Max quota via Claude Code) or `api` (consumes API credits) | `cli` |
+| `CLAUDE_API_KEY` | Anthropic Claude API key — only needed when `CLAUDE_BACKEND=api` | — |
+| `CLAUDE_MODEL` | Claude model name (API backend only) | `claude-opus-4-6` |
 | `GEMINI_API_KEY` | Google Gemini API key | — |
 | `GEMINI_MODEL` | Gemini model name | `xxx` |
 | `OPENAI_API_KEY` | OpenAI API key | — |
 | `OPENAI_MODEL` | OpenAI model name | `xxx` |
 
-The preferred LLM provider can be set via `PREFERRED_PROVIDER` at the top of `report.py` (`"claude"`, `"gemini"`, or `"openai"`). Defaults to `"claude"`.
+The CLI backend always uses the `sonnet` model alias (hardcoded in `providers.py`). The preferred LLM provider can be set via `PREFERRED_PROVIDER` in `arxiv_report/config.py` (`"claude"`, `"gemini"`, or `"openai"`). Defaults to `"claude"`.
 
 ## Usage
 
 ```bash
-export ANTHROPIC_API_KEY="your_api_key_here"
+# Default: today's report via Claude Code CLI (Max subscription)
+python report.py
+
+# Generate a report for any historical date (uses arXiv's submittedDate range query)
+python report.py --date 2026-03-15
+
+# Switch to the API SDK:
+export CLAUDE_BACKEND=api
+export CLAUDE_API_KEY="your_api_key_here"
 python report.py
 ```
 

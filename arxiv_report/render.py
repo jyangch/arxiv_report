@@ -6,9 +6,14 @@ import os
 REPORTS_DIR = './reports'
 
 
-def save_html(papers: list[dict], report: str, provider: str) -> str:
+def save_html(
+    papers: list[dict],
+    report: str,
+    provider: str,
+    as_of: datetime.datetime | None = None,
+) -> str:
     """Render the final HTML and write it to ./reports/. Returns the output path."""
-    date_str = datetime.datetime.now().strftime('%Y-%m-%d')
+    date_str = (as_of or datetime.datetime.now()).strftime('%Y-%m-%d')
     body_content = report.replace('```html', '').replace('```', '')
     html_layout = f"""\
 <!DOCTYPE html>
@@ -171,6 +176,7 @@ code, .entry-id {{
     padding: 18px 24px;
     margin: 18px 0;
     transition: border-color 0.2s, box-shadow 0.2s;
+    scroll-margin-top: 40vh;
 }}
 .paper-item:target {{
     border-color: var(--primary);
@@ -208,6 +214,19 @@ h3 a:hover {{ text-decoration: underline; }}
     font-size: 0.85em;
     font-weight: 600;
     margin-right: 6px;
+}}
+.errbar {{
+    display: inline-flex;
+    flex-direction: column;
+    vertical-align: -0.3em;
+    font-size: 0.72em;
+    line-height: 1;
+    margin: 0 2px;
+}}
+.errbar sup, .errbar sub {{
+    font-size: 1em;
+    line-height: 1;
+    vertical-align: baseline;
 }}
 strong {{ color: var(--text); font-weight: 600; }}
 @media (max-width: 600px) {{
