@@ -11,12 +11,28 @@ from arxiv_report.providers import generate_report
 from arxiv_report.render import REPORTS_DIR, save_html
 
 st.set_page_config(page_title='arXiv astro-ph.HE Daily Report', layout='wide')
-st.title('arXiv astro-ph.HE Daily Report Generator')
+
+_HEADER_HTML = """
+<style>
+    .block-container { padding-top: 2rem !important; }
+</style>
+<div style="margin: 0 0 22px;">
+    <h1 style="margin: 0; font-size: 2.05rem; font-weight: 800;
+               letter-spacing: -0.018em; line-height: 1.12;">
+        arXiv astro-ph.HE<br><span style="
+            background: linear-gradient(120deg, #1f4e8c 0%, #6c3eb0 55%, #c93d8a 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        ">Daily Report Generator</span>
+    </h1>
+</div>
+"""
+st.markdown(_HEADER_HTML, unsafe_allow_html=True)
 
 left, right = st.columns([1, 3], gap='large')
 
 with left:
-    st.subheader('🛠 Generate')
     today_et = datetime.datetime.now(ARXIV_TZ).date()
     selected_date = st.date_input('Date (ET)', value=today_et)
     expected_path = f'{REPORTS_DIR}/arXiv_astro_ph_HE_daily_report_{selected_date}.html'
@@ -47,10 +63,9 @@ with left:
                     st.error(f'Failed: {e}')
 
 with right:
-    st.subheader(f'📄 Preview: {selected_date}')
     if os.path.exists(expected_path):
         with open(expected_path, encoding='utf-8-sig') as f:
             html = f.read()
         components.html(html, height=1200, scrolling=True)
     else:
-        st.info(f'No report for `{selected_date}` yet. Click "Generate report" on the left.')
+        st.info(f'No report for {selected_date} yet. Click "Generate report" on the left.')

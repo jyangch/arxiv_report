@@ -92,7 +92,7 @@ _PROMPT_TEMPLATE = """\
 <p><strong>中文标题：</strong>专业学术翻译</p>
 <p><strong>作者：</strong>作者列表（超过 10 位仅列前 10 位，末尾追加 "et al."）</p>
 <p><strong>研究问题：</strong>1 句中文，点出这篇文章试图回答/质疑/检验的具体科学问题或切入点</p>
-<p><strong>研究方法：</strong><span class="method-tag">[Observation|Simulation|Theory|Modeling 四选一]</span> 2-3 句中文，直接描述核心方法与数据/模型</p>
+<p><strong>研究方法：</strong><span class="method-tag">[Observation]</span> 2-3 句中文，直接描述核心方法与数据/模型</p>
 <p><strong>研究结果：</strong>2-4 句中文，直接陈述关键物理发现，至少含一个定量数值、能段、或显著性约束</p>
 </div>
 
@@ -102,11 +102,11 @@ _PROMPT_TEMPLATE = """\
     - ❌ 泛背景："GRB 是宇宙中最剧烈的爆发现象"
     - ✅ 具体问题："用 NICER X 射线脉冲轮廓拟合约束中子星半径 R，区分软态与硬态核物态方程"
 - 若论文确实没有非平凡的科学问题（如：纯数据释出、仪器/巡天介绍、综述类、纯方法论文），则**整行 <p><strong>研究问题：</strong>...</p> 省略**，不要写"无明确问题"、"旨在介绍 X"等占位句
-- "研究方法"标签按论文主体方法判断：
-    - 纯数据分析 → Observation
-    - 数值/MHD/N-body → Simulation
-    - 解析推导 → Theory
-    - 含拟合/参数推断/半解析 → Modeling
+- "研究方法"标签按论文主体方法判断，<span class="method-tag"> 内的标签**必须**保留方括号：
+    - 纯数据分析 → [Observation]
+    - 数值/MHD/N-body → [Simulation]
+    - 解析推导 → [Theory]
+    - 含拟合/参数推断/半解析 → [Modeling]
 - "研究结果"部分必须包含具体数值（如测量值±误差、置信度上下限、能段、显著性 σ），避免泛泛"显著相关"、"有较好一致性"等空话
 - "Status badge HTML" 字段已是预渲染的 HTML 片段，**逐字符原样**插入 <h3> 中 Entry ID 链接之后，不要修改 class 名、不要重写文本、不要加注释；若值为 "(none)" 则不插入任何内容
 - "Status badge HTML" 字段仅决定徽章显示，不影响"今日重点"挑选权重——纯预印本（无徽章）若有非平凡贡献仍可入选
