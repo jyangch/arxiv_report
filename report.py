@@ -9,6 +9,7 @@ from arxiv_report.render import save_html
 
 
 def _parse_as_of(date_str: str | None) -> datetime.datetime | None:
+    """Parse a ``YYYY-MM-DD`` string into noon ET; exit cleanly on bad format."""
     if not date_str:
         return None
     try:
@@ -19,6 +20,11 @@ def _parse_as_of(date_str: str | None) -> datetime.datetime | None:
 
 
 def main() -> int:
+    """Run the report generation flow once and exit.
+
+    Returns:
+        ``0`` on success, ``1`` if every LLM provider failed.
+    """
     parser = argparse.ArgumentParser(description='Generate arXiv astro-ph.HE daily report.')
     parser.add_argument(
         '--date',

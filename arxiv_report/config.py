@@ -1,7 +1,7 @@
 """Provider keys, model defaults, and dispatch order.
 
 All values come from environment variables; defaults are baked in for offline runs
-(though API keys must be supplied — empty key disables the provider).
+(though API keys must be supplied -- an empty key disables the provider).
 """
 
 import os

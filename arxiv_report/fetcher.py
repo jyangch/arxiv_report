@@ -11,13 +11,20 @@ ARXIV_MAX_RESULTS = 500
 ARXIV_TZ = pytz.timezone('US/Eastern')
 
 
-def get_arxiv_sync_window(as_of: datetime.datetime | None = None):
-    """Return the (start, end) ET datetime window matching arXiv's daily release cadence.
+def get_arxiv_sync_window(
+    as_of: datetime.datetime | None = None,
+) -> tuple[datetime.datetime, datetime.datetime]:
+    """Compute the (start, end) ET window matching arXiv's daily release cadence.
 
-    arXiv announces submissions at 14:00 ET each weekday. We define a window ending at
-    14:00 ET of the most recent announcement day and starting just after the previous
-    one (with a 3-day stretch on Mondays to cover the weekend gap). When ``as_of`` is
-    provided, the window is computed relative to that timestamp rather than now.
+    arXiv announces submissions at 14:00 ET each weekday. The window ends at
+    14:00 ET on the day before ``as_of`` and starts 1 (or 3 on Mondays) days
+    earlier to cover the weekend gap. On weekends ``start == end``.
+
+    Args:
+        as_of: Reference timestamp; defaults to ``now`` in the Eastern timezone.
+
+    Returns:
+        A pair of timezone-aware ET datetimes ``(start, end)``.
     """
     now_et = as_of.astimezone(ARXIV_TZ) if as_of else datetime.datetime.now(ARXIV_TZ)
     weekday = now_et.weekday()
@@ -38,8 +45,21 @@ def _fmt_arxiv_date(dt: datetime.datetime) -> str:
     return dt.astimezone(pytz.UTC).strftime('%Y%m%d%H%M')
 
 
-def fetch_arxiv_papers(as_of: datetime.datetime | None = None):
-    """Fetch and normalize papers in the sync window for ``as_of`` (defaults to now)."""
+def fetch_arxiv_papers(as_of: datetime.datetime | None = None) -> list[dict]:
+    """Fetch arXiv astro-ph.HE papers within the sync window.
+
+    Issues a ``submittedDate`` range query so any historical date works, then
+    re-filters in Python to guard against timezone-interpretation drift between
+    client and server.
+
+    Args:
+        as_of: Reference timestamp; defaults to ``now`` in the Eastern timezone.
+
+    Returns:
+        A list of paper dicts keyed by ``title``, ``authors``, ``summary``,
+        ``url``, ``pdf_url``, ``categories``, ``comment``, ``journal_ref``,
+        ``doi``. Empty when the window is empty (weekend / no submissions).
+    """
     start_t, end_t = get_arxiv_sync_window(as_of=as_of)
     print(f'🔍 Fetching arXiv announcements (Submission window: {start_t} -> {end_t} ET)')
 

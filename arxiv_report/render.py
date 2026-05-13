@@ -12,7 +12,20 @@ def save_html(
     provider: str,
     as_of: datetime.datetime | None = None,
 ) -> str:
-    """Render the final HTML and write it to ./reports/. Returns the output path."""
+    """Wrap the LLM-generated body in a styled HTML shell and write it to disk.
+
+    The filename uses ``YYYY-MM-DD`` derived from ``as_of`` (or today). The
+    output file is overwritten if it already exists.
+
+    Args:
+        papers: Original paper list; only its length is used in the header line.
+        report: HTML body fragment produced by ``generate_report``.
+        provider: Provider slug shown in the report header.
+        as_of: Reference timestamp for the filename and header date.
+
+    Returns:
+        The path the file was written to (relative to the working directory).
+    """
     date_str = (as_of or datetime.datetime.now()).strftime('%Y-%m-%d')
     body_content = report.replace('```html', '').replace('```', '')
     html_layout = f"""\

@@ -90,7 +90,7 @@ _PROMPT_TEMPLATE = """\
 <h3>[N] <a href="论文的Entry ID URL">Entry ID</a> [此处粘贴 Status badge HTML 字段的内容；若该字段为 "(none)" 则整体省略含前导空格]</h3>
 <p><strong>英文标题：</strong>原英文标题</p>
 <p><strong>中文标题：</strong>专业学术翻译</p>
-<p><strong>作者：</strong>作者列表（超过 10 位仅列前 10 位，末尾追加 "et al."）</p>
+<p><strong>作者：</strong>作者列表（超过 5 位仅列前 5 位，末尾追加 "et al."）</p>
 <p><strong>研究问题：</strong>1 句中文，点出这篇文章试图回答/质疑/检验的具体科学问题或切入点</p>
 <p><strong>研究方法：</strong><span class="method-tag">[Observation]</span> 2-3 句中文，直接描述核心方法与数据/模型</p>
 <p><strong>研究结果：</strong>2-4 句中文，直接陈述关键物理发现，至少含一个定量数值、能段、或显著性约束</p>

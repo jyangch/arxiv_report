@@ -27,6 +27,7 @@ openai_client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
 
 def _is_quota_error(error: Exception) -> bool:
+    """Heuristic check for 429 / quota / rate-limit errors across SDK conventions."""
     msg = str(error).lower()
     return ('429' in msg) or ('resource_exhausted' in msg) or ('quota exceeded' in msg)
 
@@ -151,6 +152,7 @@ def _generate_with_claude_cli(prompt: str) -> str:
 
 
 def _generate_with_claude(prompt: str) -> str:
+    """Dispatch to the API SDK or CLI subprocess depending on ``CLAUDE_BACKEND``."""
     if CLAUDE_BACKEND == 'api':
         return _generate_with_claude_api(prompt)
     return _generate_with_claude_cli(prompt)
@@ -181,7 +183,22 @@ _GENERATORS = {
 
 
 def generate_report(papers: list[dict]) -> tuple[str, str]:
-    """Build the prompt, dispatch to providers in fallback order, return (report_html, provider)."""
+    """Build the prompt and dispatch to LLM providers in fallback order.
+
+    The preferred provider is tried first; on quota / rate-limit errors the
+    dispatcher falls through to the next provider in ``FALLBACK_ORDER``.
+
+    Args:
+        papers: Papers from ``fetch_arxiv_papers``; an empty list short-circuits
+            to a placeholder HTML fragment.
+
+    Returns:
+        A pair ``(report_html, provider)``: the LLM-generated HTML body
+        fragment and the slug of the provider that produced it.
+
+    Raises:
+        RuntimeError: If every provider fails.
+    """
     if not papers:
         return 'No new papers today.</p>', ''
 

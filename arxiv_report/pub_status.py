@@ -1,13 +1,4 @@
-"""Infer publication status (preprint / submitted / accepted / published) from arXiv metadata.
-
-Detection priority (most deterministic first):
-    1. journal_ref present  → published
-    2. comment contains 'accepted' / 'in press'  → accepted
-    3. comment contains 'published'  → published
-    4. comment contains 'submitted'  → submitted
-    5. doi present (no other status hint)  → accepted
-    6. otherwise  → preprint (no badge displayed)
-"""
+"""Infer publication status (preprint / submitted / accepted / published) from arXiv metadata."""
 
 import re
 
@@ -36,10 +27,25 @@ def _extract_journal_from_comment(comment: str) -> str:
 
 
 def classify_pub_status(comment: str, journal_ref: str, doi: str) -> tuple[str, str]:
-    """Return (status_class, label).
+    """Infer publication status from arXiv metadata fields.
 
-    status_class ∈ {'published', 'accepted', 'submitted', 'preprint'}
-    label is the rendered Chinese tag (empty for preprint).
+    Detection priority (most deterministic first):
+        1. ``journal_ref`` present -> published
+        2. ``comment`` contains 'accepted' / 'in press' -> accepted
+        3. ``comment`` contains 'published' -> published
+        4. ``comment`` contains 'submitted' -> submitted
+        5. ``doi`` present with no other status hint -> accepted
+        6. otherwise -> preprint (no badge displayed)
+
+    Args:
+        comment: The arXiv submission comment field, possibly empty.
+        journal_ref: The arXiv ``journal_ref`` field, possibly empty.
+        doi: The arXiv ``doi`` field, possibly empty.
+
+    Returns:
+        A pair ``(status_class, label)`` where ``status_class`` is one of
+        ``'published'``, ``'accepted'``, ``'submitted'``, ``'preprint'`` and
+        ``label`` is the rendered Chinese tag (empty for preprint).
     """
     if journal_ref:
         journal = _extract_journal_short(journal_ref)

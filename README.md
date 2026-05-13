@@ -5,10 +5,12 @@ Automatically fetches the latest papers from the arXiv `astro-ph.HE` (High Energ
 ## Features
 
 - Fetches newly submitted papers based on arXiv's submission sync window (US Eastern Time)
+- Supports arbitrary historical dates via arXiv's `submittedDate` range query
 - Classifies papers by research topic (e.g., GRBs, black holes, supernovae, cosmic rays)
 - Generates Chinese-language summaries for each paper, including research method tags and key physical findings
-- Supports Claude, Gemini, and OpenAI backends with automatic fallback on quota errors
-- Outputs a styled, self-contained HTML report
+- Supports Claude (CLI or API), Gemini, and OpenAI backends with automatic fallback on quota errors
+- Outputs a styled, self-contained HTML report (light/dark theme adaptive, internal anchor scrolling)
+- Optional Streamlit web UI with date picker and inline preview
 
 ## Installation
 
@@ -25,14 +27,14 @@ Set API keys, models, and the Claude backend via environment variables (all opti
 | Variable | Description | Default |
 |---|---|---|
 | `CLAUDE_BACKEND` | `cli` (consumes Max quota via Claude Code) or `api` (consumes API credits) | `cli` |
-| `CLAUDE_API_KEY` | Anthropic Claude API key — only needed when `CLAUDE_BACKEND=api` | — |
+| `CLAUDE_API_KEY` | Anthropic Claude API key -- only needed when `CLAUDE_BACKEND=api` | — |
 | `CLAUDE_MODEL` | Claude model name (API backend only) | `claude-opus-4-6` |
 | `GEMINI_API_KEY` | Google Gemini API key | — |
-| `GEMINI_MODEL` | Gemini model name | `xxx` |
+| `GEMINI_MODEL` | Gemini model name | `gemini-3.1-flash-lite-preview` |
 | `OPENAI_API_KEY` | OpenAI API key | — |
-| `OPENAI_MODEL` | OpenAI model name | `xxx` |
+| `OPENAI_MODEL` | OpenAI model name | `gpt-5.4` |
 
-The CLI backend always uses the `sonnet` model alias (hardcoded in `providers.py`). The preferred LLM provider can be set via `PREFERRED_PROVIDER` in `arxiv_report/config.py` (`"claude"`, `"gemini"`, or `"openai"`). Defaults to `"claude"`.
+The CLI backend always uses the `opus` model alias (hardcoded in `providers.py`). The preferred LLM provider can be set via `PREFERRED_PROVIDER` in `arxiv_report/config.py` (`"claude"`, `"gemini"`, or `"openai"`). Defaults to `"claude"`.
 
 ## Usage
 
@@ -57,9 +59,9 @@ python report.py
 streamlit run app.py
 ```
 
-Opens a browser tab with a date picker and a Generate button; reports are saved into `./reports/` and shown inline.
+Opens a browser tab with a two-column layout: pick a date and click Generate on the left; the rendered report appears inline on the right. Selecting any date that already has a saved file in `./reports/` loads that report immediately (no regeneration), so the same UI doubles as a browser for historical reports.
 
-An HTML report will be generated in the current directory.
+For running the Streamlit app as a background macOS service, see [docs/launchagent-setup.md](docs/launchagent-setup.md).
 
 ## Output Structure
 
