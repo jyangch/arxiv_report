@@ -59,12 +59,16 @@ def _generate_with_claude_cli(prompt: str) -> str:
     """
     proc = subprocess.Popen(
         [
-            'claude', '-p',
-            '--output-format', 'stream-json',
+            'claude',
+            '-p',
+            '--output-format',
+            'stream-json',
             '--include-partial-messages',
             '--verbose',
-            '--model', 'opus',
-            '--tools', '',
+            '--model',
+            'opus',
+            '--tools',
+            '',
             '--no-session-persistence',
         ],
         stdin=subprocess.PIPE,
