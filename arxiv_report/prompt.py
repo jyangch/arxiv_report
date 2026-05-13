@@ -50,7 +50,7 @@ _PROMPT_TEMPLATE = """\
 报告结构：
 
 第一部分：领域索引
-- 用 <div class="index-box"> 包裹
+- 用 <div class="index-box"> 包裹，内部首行为 <h3>领域索引</h3>
 - 仅从以下固定子领域中选择，类别名严格使用括号前的中文标签：
     1. 伽马射线暴（GRB / Afterglow）
     2. 快速射电暴（FRB）

@@ -176,9 +176,9 @@ code, .entry-id {{
     padding: 18px 24px;
     margin: 18px 0;
     transition: border-color 0.2s, box-shadow 0.2s;
-    scroll-margin-top: 40vh;
 }}
-.paper-item:target {{
+.paper-item:target,
+.paper-item.is-target {{
     border-color: var(--primary);
     box-shadow: 0 0 0 3px var(--primary-soft);
 }}
@@ -216,17 +216,24 @@ h3 a:hover {{ text-decoration: underline; }}
     margin-right: 6px;
 }}
 .errbar {{
-    display: inline-flex;
-    flex-direction: column;
-    vertical-align: -0.3em;
+    display: inline-block;
+    vertical-align: -0.45em;
     font-size: 0.72em;
     line-height: 1;
     margin: 0 2px;
+    text-align: left;
 }}
-.errbar sup, .errbar sub {{
+.errbar sup,
+.errbar sub {{
+    display: block;
     font-size: 1em;
-    line-height: 1;
+    line-height: 1.05;
     vertical-align: baseline;
+    position: static;
+    top: auto;
+    bottom: auto;
+    margin: 0;
+    padding: 0;
 }}
 strong {{ color: var(--text); font-weight: 600; }}
 @media (max-width: 600px) {{
@@ -252,10 +259,11 @@ document.addEventListener('click', function(e) {{
     const id = link.getAttribute('href').slice(1);
     if (!id) return;
     const target = document.getElementById(id);
-    if (target) {{
-        e.preventDefault();
-        target.scrollIntoView({{behavior: 'smooth', block: 'start'}});
-    }}
+    if (!target) return;
+    e.preventDefault();
+    document.querySelectorAll('.is-target').forEach(el => el.classList.remove('is-target'));
+    target.classList.add('is-target');
+    target.scrollIntoView({{behavior: 'auto', block: 'center'}});
 }});
 </script>
 </body>
