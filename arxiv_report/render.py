@@ -245,6 +245,19 @@ strong {{ color: var(--text); font-weight: 600; }}
     </div>
     {body_content}
 </div>
+<script>
+document.addEventListener('click', function(e) {{
+    const link = e.target.closest('a[href^="#"]');
+    if (!link) return;
+    const id = link.getAttribute('href').slice(1);
+    if (!id) return;
+    const target = document.getElementById(id);
+    if (target) {{
+        e.preventDefault();
+        target.scrollIntoView({{behavior: 'smooth', block: 'start'}});
+    }}
+}});
+</script>
 </body>
 </html>"""
 

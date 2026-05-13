@@ -13,7 +13,7 @@ Automatically fetches the latest papers from the arXiv `astro-ph.HE` (High Energ
 ## Installation
 
 ```bash
-pip install arxiv pytz anthropic google-genai openai
+pip install arxiv pytz anthropic google-genai openai streamlit
 ```
 
 For the default Claude CLI backend, also install [Claude Code](https://claude.com/claude-code) and log in once with `claude /login` (choose the Anthropic Console / Pro / Max path).
@@ -36,6 +36,8 @@ The CLI backend always uses the `sonnet` model alias (hardcoded in `providers.py
 
 ## Usage
 
+### CLI
+
 ```bash
 # Default: today's report via Claude Code CLI (Max subscription)
 python report.py
@@ -48,6 +50,14 @@ export CLAUDE_BACKEND=api
 export CLAUDE_API_KEY="your_api_key_here"
 python report.py
 ```
+
+### Web UI (Streamlit)
+
+```bash
+streamlit run app.py
+```
+
+Opens a browser tab with a date picker and a Generate button; reports are saved into `./reports/` and shown inline.
 
 An HTML report will be generated in the current directory.
 
