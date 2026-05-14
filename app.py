@@ -14,7 +14,7 @@ st.set_page_config(page_title='arXiv astro-ph.HE Daily Report', layout='wide')
 
 _HEADER_HTML = """
 <style>
-    .block-container { padding-top: 2rem !important; }
+    .block-container { padding-top: 4rem !important; }
     .report-header { margin: 0 0 26px; }
     .report-header .kicker {
         margin: 0 0 6px;
@@ -23,6 +23,10 @@ _HEADER_HTML = """
         letter-spacing: 0.18em;
         text-transform: uppercase;
         color: #6b7280;
+    }
+    .report-header .title-block {
+        width: fit-content;
+        max-width: 100%;
     }
     .report-header .title {
         margin: 0;
@@ -38,15 +42,17 @@ _HEADER_HTML = """
     .report-header .accent {
         margin-top: 12px;
         height: 3px;
-        width: 100px;
+        width: 100%;
         border-radius: 2px;
         background: linear-gradient(90deg, #1f4e8c 0%, #6c3eb0 55%, #c93d8a 100%);
     }
 </style>
 <div class="report-header">
     <p class="kicker">arXiv · astro-ph.HE</p>
-    <h1 class="title">Daily Report Generator</h1>
-    <div class="accent"></div>
+    <div class="title-block">
+        <h1 class="title">Daily Report Generator</h1>
+        <div class="accent"></div>
+    </div>
 </div>
 """
 left, right = st.columns([1, 3], gap='large')

@@ -1,6 +1,16 @@
 """Prompt construction: build the per-paper input block and the full LLM prompt."""
 
+import re
+
 from arxiv_report.pub_status import classify_pub_status
+
+_ARXIV_DISPLAY_ID_RE = re.compile(r'/abs/([^/?#]+)')
+
+
+def _arxiv_display_id(url: str) -> str:
+    """Extract arxiv id WITH version suffix for display, e.g. '2605.13799v1'."""
+    m = _ARXIV_DISPLAY_ID_RE.search(url or '')
+    return m.group(1) if m else url or ''
 
 
 def _render_status_badge(paper: dict) -> str:
@@ -21,7 +31,8 @@ def _build_input_text(papers: list[dict]) -> str:
     for i, p in enumerate(papers):
         badge = _render_status_badge(p)
         blocks.append(
-            f'[{i + 1}] Entry ID: {p["url"]}\n'
+            f'[{i + 1}] arXiv ID: {_arxiv_display_id(p["url"])}\n'
+            f'URL: {p["url"]}\n'
             f'Title: {p["title"]}\n'
             f'Authors: {p["authors"]}\n'
             f'Categories: {", ".join(p["categories"])}\n'
@@ -43,10 +54,13 @@ _PROMPT_TEMPLATE = """\
 - 不要包含 <html>/<head>/<body> 标签
 - 不要使用 Markdown
 - 不要使用 ```html``` 等代码围栏
-- 物理符号默认使用 Unicode（α、β、γ、ν、ν̄、M⊙、erg s⁻¹、10⁻¹² 等），严禁 LaTeX（$\\alpha$、\\frac{{}}{{}} 等）
+- 物理符号默认使用 Unicode（α、β、γ、ν、ν̄、erg s⁻¹、10⁻¹² 等），严禁 LaTeX（$\\alpha$、\\frac{{}}{{}} 等）
 - 非对称误差棒不要用 Unicode 上下标拼接（Unicode 无法垂直堆叠且缺少小数点上下标），必须用 HTML：
     示例：H₀ = 71.4<span class="errbar"><sup>+13.8</sup><sub>-13.4</sub></span> km s⁻¹ Mpc⁻¹
 - 上下标若含小数点、字母混排或多位数字组合（Unicode 难以干净表达），同样使用 <sup>/<sub>，例如 10<sup>2.5</sup>、χ<sub>eff</sub>
+- 天体符号 ⊙（太阳）、⊕（地球）、♃（木星）作为下标使用时**必须**用 <sub>，绝不能直接接在主符号后（Unicode 无下标版本）：
+    - ❌ M⊙、R⊙、L⊙（圆点在基线位）
+    - ✅ M<sub>⊙</sub>、R<sub>⊙</sub>、L<sub>⊙</sub>
 - 中文翻译保留 GRB、AGN、SN、PSR、FRB、TDE 等约定俗成的英文缩写
 
 报告结构：
@@ -105,7 +119,7 @@ _PROMPT_TEMPLATE = """\
 按编号 1 到 {paper_count} 顺序排列。每篇严格按以下模板（N 替换为论文编号）：
 
 <div class="paper-item" id="pN">
-<h3>[N] <a href="论文的Entry ID URL">Entry ID</a> [粘贴 Status badge HTML 字段（处理规则见写作要求）]</h3>
+<h3>[N] <a href="URL 字段值">arXiv ID 字段值</a> [粘贴 Status badge HTML 字段（处理规则见写作要求）]</h3>
 <p><strong>英文标题：</strong>原英文标题</p>
 <p><strong>中文标题：</strong>专业学术翻译</p>
 <p><strong>作者：</strong>作者列表（超过 5 位仅列前 5 位，末尾追加 "et al."）</p>

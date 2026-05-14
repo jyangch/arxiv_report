@@ -3,6 +3,7 @@
 import concurrent.futures
 import datetime
 from datetime import timedelta
+from html import unescape as _html_unescape
 import json
 import os
 import re
@@ -109,7 +110,7 @@ def _fetch_abs_metadata(arxiv_id: str, timeout: float = 10.0) -> tuple[str, str,
 
     def first(regex: re.Pattern) -> str:
         m = regex.search(html)
-        return m.group(1).strip() if m else ''
+        return _html_unescape(m.group(1)).strip() if m else ''
 
     return first(_ABS_COMMENTS_RE), first(_ABS_JREF_RE), first(_ABS_DOI_RE)
 
@@ -298,6 +299,7 @@ def fetch_arxiv_papers(as_of: datetime.datetime | None = None) -> list[dict]:
             print(f'⚠️  api returned 429; cooldown set for {ARXIV_COOLDOWN_SECONDS // 60} min.')
             papers = _fetch_via_rss()
 
+    papers.sort(key=lambda p: _extract_arxiv_id(p.get('url', '')) or '', reverse=True)
     _save_cache(start_t, end_t, papers)
     print(f'✅ Found {len(papers)} papers within the sync window.')
     return papers
