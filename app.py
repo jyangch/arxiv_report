@@ -15,30 +15,52 @@ st.set_page_config(page_title='arXiv astro-ph.HE Daily Report', layout='wide')
 _HEADER_HTML = """
 <style>
     .block-container { padding-top: 2rem !important; }
+    .report-header { margin: 0 0 26px; }
+    .report-header .kicker {
+        margin: 0 0 6px;
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: #6b7280;
+    }
+    .report-header .title {
+        margin: 0;
+        font-size: 1.7rem;
+        font-weight: 800;
+        letter-spacing: -0.022em;
+        line-height: 1.15;
+        background: linear-gradient(120deg, #1f4e8c 0%, #6c3eb0 55%, #c93d8a 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }
+    .report-header .accent {
+        margin-top: 12px;
+        height: 3px;
+        width: 100px;
+        border-radius: 2px;
+        background: linear-gradient(90deg, #1f4e8c 0%, #6c3eb0 55%, #c93d8a 100%);
+    }
 </style>
-<div style="margin: 0 0 22px;">
-    <h1 style="margin: 0; font-size: 2.05rem; font-weight: 800;
-               letter-spacing: -0.018em; line-height: 1.12;">
-        arXiv astro-ph.HE<br><span style="
-            background: linear-gradient(120deg, #1f4e8c 0%, #6c3eb0 55%, #c93d8a 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        ">Daily Report Generator</span>
-    </h1>
+<div class="report-header">
+    <p class="kicker">arXiv · astro-ph.HE</p>
+    <h1 class="title">Daily Report Generator</h1>
+    <div class="accent"></div>
 </div>
 """
-st.markdown(_HEADER_HTML, unsafe_allow_html=True)
-
 left, right = st.columns([1, 3], gap='large')
 
 with left:
+    st.markdown(_HEADER_HTML, unsafe_allow_html=True)
     today_et = datetime.datetime.now(ARXIV_TZ).date()
-    selected_date = st.date_input('Date (ET)', value=today_et)
+    selected_date = st.date_input('Date (ET)', value=today_et, label_visibility='collapsed')
     expected_path = f'{REPORTS_DIR}/arXiv_astro_ph_HE_daily_report_{selected_date}.html'
 
     if os.path.exists(expected_path):
         st.caption('✅ A report already exists for this date (clicking will overwrite).')
+    else:
+        st.caption(f'⚠️ No report for {selected_date} yet. Click "Generate report" below.')
 
     if st.button('Generate report', type='primary', use_container_width=True):
         as_of = ARXIV_TZ.localize(datetime.datetime.combine(selected_date, datetime.time(hour=12)))
@@ -75,5 +97,3 @@ with right:
         with open(expected_path, encoding='utf-8-sig') as f:
             html = f.read()
         components.html(html, height=1200, scrolling=True)
-    else:
-        st.info(f'No report for {selected_date} yet. Click "Generate report" on the left.')
