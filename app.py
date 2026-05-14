@@ -44,14 +44,22 @@ with left:
         as_of = ARXIV_TZ.localize(datetime.datetime.combine(selected_date, datetime.time(hour=12)))
         with st.status('Starting…', expanded=True) as status:
             st.write('🔍 Fetching arXiv papers…')
-            papers = fetch_arxiv_papers(as_of=as_of)
+            try:
+                papers = fetch_arxiv_papers(as_of=as_of)
+            except Exception as e:
+                status.update(label='Fetch failed', state='error')
+                st.error(f'arXiv fetch failed: {e}')
+                st.info(
+                    'arXiv API may be rate-limiting (HTTP 429). Wait 5-15 minutes and try again.'
+                )
+                st.stop()
             st.write(f'Found **{len(papers)}** papers')
 
             if not papers:
                 status.update(label='Empty window', state='complete')
                 st.warning('No papers for this date (weekend / holiday / out of range).')
             else:
-                st.write('🧠 Calling LLM (may take 1–2 minutes)…')
+                st.write('🧠 Calling LLM (may take several minutes)…')
                 try:
                     report, provider = generate_report(papers)
                     st.write(f'Provider: **{provider}**')
