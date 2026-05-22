@@ -3,6 +3,8 @@
 import datetime
 from pathlib import Path
 
+from fastapi.testclient import TestClient
+
 from server import _list_recent_dates, _parse_date
 
 
@@ -56,3 +58,22 @@ class TestListRecentDates:
         (reports_dir / 'README.txt').write_text('x')
         (reports_dir / 'arXiv_astro_ph_HE_daily_report_garbage.html').write_text('x')
         assert _list_recent_dates() == [datetime.date(2026, 5, 15)]
+
+
+class TestRawRoute:
+    def test_serves_existing_report(self, client: TestClient, reports_dir: Path) -> None:
+        (reports_dir / 'arXiv_astro_ph_HE_daily_report_2026-05-22.html').write_text(
+            '<html><body>hello</body></html>'
+        )
+        r = client.get('/r/2026-05-22/raw')
+        assert r.status_code == 200
+        assert 'hello' in r.text
+        assert r.headers['content-type'].startswith('text/html')
+
+    def test_missing_file_returns_404(self, client: TestClient) -> None:
+        r = client.get('/r/2099-01-01/raw')
+        assert r.status_code == 404
+
+    def test_invalid_date_returns_400(self, client: TestClient) -> None:
+        r = client.get('/r/foo/raw')
+        assert r.status_code == 400

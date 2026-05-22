@@ -5,7 +5,8 @@ import glob
 import os
 import re
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -49,6 +50,23 @@ def _list_recent_dates(limit: int = 30) -> list[datetime.date]:
     return out[:limit]
 
 
+def _report_path(date: datetime.date) -> str:
+    """Filesystem path for the report HTML on this date."""
+    return os.path.join(REPORTS_DIR, f'arXiv_astro_ph_HE_daily_report_{date.isoformat()}.html')
+
+
 app = FastAPI(title='arXiv astro-ph.HE Daily Report')
 app.mount('/static', StaticFiles(directory='static'), name='static')
 templates = Jinja2Templates(directory='templates')
+
+
+@app.get('/r/{date}/raw')
+def report_raw(date: str) -> FileResponse:
+    """Serve the raw report HTML for the iframe ``src``."""
+    parsed = _parse_date(date)
+    if parsed is None:
+        raise HTTPException(status_code=400, detail='Invalid date')
+    path = _report_path(parsed)
+    if not os.path.exists(path):
+        raise HTTPException(status_code=404, detail='Report not found')
+    return FileResponse(path, media_type='text/html')
