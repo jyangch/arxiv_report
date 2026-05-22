@@ -141,10 +141,15 @@ syntax error -- check it with `plutil ~/Library/LaunchAgents/com.junyang.arxiv-r
 ## Daily auto-generation
 
 A second LaunchAgent at
-`~/Library/LaunchAgents/com.junyang.arxiv-report.daily.plist` POSTs to
-`/generate` at 12:00 local time on weekdays (Mon-Fri) with today's date, so a
-report is produced even on days the UI is never opened. arXiv announces no new
-papers on Saturday or Sunday, so the schedule skips them.
+`~/Library/LaunchAgents/com.junyang.arxiv-report.daily.plist` fires every 30
+minutes between 11:00 and 13:00 local on weekdays (Mon-Fri). Each firing first
+checks whether today's report already exists (HTTP GET `/r/$DATE/raw`) and
+skips `/generate` if it does, so once any attempt succeeds the remaining slots
+become no-ops and no Claude tokens are wasted. The multi-slot schedule exists
+to ride out arXiv 429 rate limits: if the 11:00 attempt is throttled, the
+30-minute cadence gives the cooldown (typically ~30 min) time to expire before
+the next retry. arXiv announces no papers on Saturday or Sunday, so weekends
+are skipped entirely.
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -158,36 +163,37 @@ papers on Saturday or Sunday, so the schedule skips them.
     <array>
         <string>/bin/sh</string>
         <string>-c</string>
-        <string>echo "[$(date)] daily trigger"; curl -fsS -X POST http://127.0.0.1:8080/generate --data-urlencode "date=$(date +%F)" >/dev/null</string>
+        <string>D=$(date +%F); S=$(curl -sS -o /dev/null -w '%{http_code}' "http://127.0.0.1:8080/r/$D/raw" 2>/dev/null || echo 000); if [ "$S" = 200 ]; then echo "[$(date)] $D exists, skip"; else echo "[$(date)] $D missing (status=$S), triggering /generate"; curl -fsS -X POST http://127.0.0.1:8080/generate --data-urlencode "date=$D" >/dev/null; fi</string>
     </array>
 
     <key>StartCalendarInterval</key>
     <array>
-        <dict>
-            <key>Weekday</key><integer>1</integer>
-            <key>Hour</key><integer>12</integer>
-            <key>Minute</key><integer>0</integer>
-        </dict>
-        <dict>
-            <key>Weekday</key><integer>2</integer>
-            <key>Hour</key><integer>12</integer>
-            <key>Minute</key><integer>0</integer>
-        </dict>
-        <dict>
-            <key>Weekday</key><integer>3</integer>
-            <key>Hour</key><integer>12</integer>
-            <key>Minute</key><integer>0</integer>
-        </dict>
-        <dict>
-            <key>Weekday</key><integer>4</integer>
-            <key>Hour</key><integer>12</integer>
-            <key>Minute</key><integer>0</integer>
-        </dict>
-        <dict>
-            <key>Weekday</key><integer>5</integer>
-            <key>Hour</key><integer>12</integer>
-            <key>Minute</key><integer>0</integer>
-        </dict>
+        <!-- Mon-Fri (Weekday 1-5) at 11:00, 11:30, 12:00, 12:30, 13:00. -->
+        <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>11</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>11</integer><key>Minute</key><integer>30</integer></dict>
+        <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>12</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>12</integer><key>Minute</key><integer>30</integer></dict>
+        <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>13</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>11</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>11</integer><key>Minute</key><integer>30</integer></dict>
+        <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>12</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>12</integer><key>Minute</key><integer>30</integer></dict>
+        <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>13</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>11</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>11</integer><key>Minute</key><integer>30</integer></dict>
+        <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>12</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>12</integer><key>Minute</key><integer>30</integer></dict>
+        <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>13</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>11</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>11</integer><key>Minute</key><integer>30</integer></dict>
+        <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>12</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>12</integer><key>Minute</key><integer>30</integer></dict>
+        <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>13</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>11</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>11</integer><key>Minute</key><integer>30</integer></dict>
+        <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>12</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>12</integer><key>Minute</key><integer>30</integer></dict>
+        <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>13</integer><key>Minute</key><integer>0</integer></dict>
     </array>
 
     <key>RunAtLoad</key>
@@ -205,15 +211,26 @@ papers on Saturday or Sunday, so the schedule skips them.
 ### Behaviour notes
 
 - The trigger relies on the main `com.junyang.arxiv-report` agent already
-  serving the UI on `127.0.0.1:8080`. If the service is down at noon the curl
-  call fails and the error lands in `.daily-generate.log`; launchd does not
-  retry until the next calendar firing.
-- If the laptop is asleep at 12:00, launchd fires the missed job once when
-  the machine wakes -- so a late-morning wake still gets a report.
+  serving the UI on `127.0.0.1:8080`. If the service is down, the existence
+  check returns `status=000`, the `POST /generate` also fails, and curl's
+  error lands in `.daily-generate.log`; launchd just waits for the next
+  calendar slot to try again.
+- If the laptop is asleep at a scheduled slot, launchd fires the missed job
+  once when the machine wakes -- a late-morning wake still kicks off the
+  day's report.
+- The trigger is inlined in `ProgramArguments` via `sh -c "..."` rather than
+  pointing at a script file in the repo. macOS TCC blocks launchd from
+  reading executables under `~/Documents`, so a `scripts/daily-trigger.sh`
+  in the project tree fails with `Operation not permitted`. Inline shell
+  sidesteps the sandbox entirely.
 - `/generate` enforces the arXiv 429 cooldown server-side, so a scheduled
   trigger that lands during a cooldown returns the error partial (logged, no
-  report) instead of queuing a doomed task.
-- To test without waiting for noon:
+  report) instead of queuing a doomed task. The next 30-min slot retries.
+- If two slots overlap because a Claude generation takes more than 30 min
+  (rare), both workers will run; the arXiv fetch is cached after the first,
+  but the second will still spend Claude tokens. Not handled today -- add
+  in-flight dedupe to `/generate` if it ever becomes a real problem.
+- To test without waiting for the schedule:
   `launchctl start com.junyang.arxiv-report.daily`.
-- To change the time, edit the plist, then
+- To change the schedule, edit the plist, then
   `launchctl unload ~/Library/LaunchAgents/com.junyang.arxiv-report.daily.plist && launchctl load ~/Library/LaunchAgents/com.junyang.arxiv-report.daily.plist`.
