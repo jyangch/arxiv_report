@@ -142,8 +142,9 @@ syntax error -- check it with `plutil ~/Library/LaunchAgents/com.junyang.arxiv-r
 
 A second LaunchAgent at
 `~/Library/LaunchAgents/com.junyang.arxiv-report.daily.plist` POSTs to
-`/generate` at 12:00 local time every day with today's date, so a report is
-produced even on days the UI is never opened.
+`/generate` at 12:00 local time on weekdays (Mon-Fri) with today's date, so a
+report is produced even on days the UI is never opened. arXiv announces no new
+papers on Saturday or Sunday, so the schedule skips them.
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -161,12 +162,33 @@ produced even on days the UI is never opened.
     </array>
 
     <key>StartCalendarInterval</key>
-    <dict>
-        <key>Hour</key>
-        <integer>12</integer>
-        <key>Minute</key>
-        <integer>0</integer>
-    </dict>
+    <array>
+        <dict>
+            <key>Weekday</key><integer>1</integer>
+            <key>Hour</key><integer>12</integer>
+            <key>Minute</key><integer>0</integer>
+        </dict>
+        <dict>
+            <key>Weekday</key><integer>2</integer>
+            <key>Hour</key><integer>12</integer>
+            <key>Minute</key><integer>0</integer>
+        </dict>
+        <dict>
+            <key>Weekday</key><integer>3</integer>
+            <key>Hour</key><integer>12</integer>
+            <key>Minute</key><integer>0</integer>
+        </dict>
+        <dict>
+            <key>Weekday</key><integer>4</integer>
+            <key>Hour</key><integer>12</integer>
+            <key>Minute</key><integer>0</integer>
+        </dict>
+        <dict>
+            <key>Weekday</key><integer>5</integer>
+            <key>Hour</key><integer>12</integer>
+            <key>Minute</key><integer>0</integer>
+        </dict>
+    </array>
 
     <key>RunAtLoad</key>
     <false/>
