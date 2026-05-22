@@ -6,7 +6,7 @@ import os
 import re
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -79,6 +79,16 @@ def _render_partial(name: str, **ctx) -> str:
 
 
 app.mount('/static', StaticFiles(directory='static'), name='static')
+
+
+@app.get('/', response_model=None)
+def index(request: Request) -> HTMLResponse | RedirectResponse:
+    """Redirect to the latest report, or render a placeholder if none exist."""
+    dates = _list_recent_dates(limit=1)
+    if dates:
+        return RedirectResponse(url=f'/r/{dates[0].isoformat()}')
+    main = _render_partial('partials/placeholder.html', date='any date')
+    return _render_home(request, None, main)
 
 
 @app.get('/r/{date}', response_class=HTMLResponse)

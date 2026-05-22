@@ -98,3 +98,17 @@ class TestDateRoute:
     def test_invalid_date_returns_400(self, client: TestClient) -> None:
         r = client.get('/r/foo')
         assert r.status_code == 400
+
+
+class TestRoot:
+    def test_no_reports_renders_placeholder(self, client: TestClient) -> None:
+        r = client.get('/')
+        assert r.status_code == 200
+        assert 'No report' in r.text
+
+    def test_with_reports_redirects_to_latest(self, client: TestClient, reports_dir: Path) -> None:
+        for d in ('2026-05-13', '2026-05-19', '2026-05-15'):
+            (reports_dir / f'arXiv_astro_ph_HE_daily_report_{d}.html').write_text('x')
+        r = client.get('/', follow_redirects=False)
+        assert r.status_code == 307
+        assert r.headers['location'] == '/r/2026-05-19'
