@@ -115,3 +115,11 @@ def report_raw(date: str) -> FileResponse:
     if not os.path.exists(path):
         raise HTTPException(status_code=404, detail='Report not found')
     return FileResponse(path, media_type='text/html')
+
+
+@app.get('/recent', response_class=HTMLResponse)
+def recent(active: str = '') -> HTMLResponse:
+    """Sidebar fragment: list of recent report dates, descending."""
+    dates = _list_recent_dates(limit=30)
+    html = _render_partial('partials/recent_list.html', dates=dates, active=active)
+    return HTMLResponse(html)

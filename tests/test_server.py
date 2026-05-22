@@ -112,3 +112,26 @@ class TestRoot:
         r = client.get('/', follow_redirects=False)
         assert r.status_code == 307
         assert r.headers['location'] == '/r/2026-05-19'
+
+
+class TestRecent:
+    def test_empty(self, client: TestClient) -> None:
+        r = client.get('/recent')
+        assert r.status_code == 200
+        assert 'No reports yet.' in r.text
+
+    def test_listing_descending(self, client: TestClient, reports_dir: Path) -> None:
+        for d in ('2026-05-13', '2026-05-19', '2026-05-15'):
+            (reports_dir / f'arXiv_astro_ph_HE_daily_report_{d}.html').write_text('x')
+        r = client.get('/recent')
+        assert r.status_code == 200
+        # First date in body should be the newest.
+        i_19 = r.text.index('2026-05-19')
+        i_15 = r.text.index('2026-05-15')
+        i_13 = r.text.index('2026-05-13')
+        assert i_19 < i_15 < i_13
+
+    def test_active_flag(self, client: TestClient, reports_dir: Path) -> None:
+        (reports_dir / 'arXiv_astro_ph_HE_daily_report_2026-05-19.html').write_text('x')
+        r = client.get('/recent?active=2026-05-19')
+        assert 'is-active' in r.text
