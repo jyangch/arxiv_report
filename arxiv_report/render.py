@@ -127,7 +127,7 @@ code, .entry-id {{
     position: absolute;
     top: 0; left: 0; right: 0;
     height: 4px;
-    background: linear-gradient(90deg, #1f4e8c 0%, #6c3eb0 55%, #c93d8a 100%);
+    background: linear-gradient(90deg, #4f46e5 0%, #06b6d4 100%);
 }}
 .report-header .kicker {{
     margin: 0 0 10px;
@@ -143,7 +143,7 @@ code, .entry-id {{
     font-weight: 800;
     letter-spacing: -0.022em;
     line-height: 1.15;
-    background: linear-gradient(120deg, #1f4e8c 0%, #6c3eb0 55%, #c93d8a 100%);
+    background: linear-gradient(120deg, #4f46e5 0%, #06b6d4 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
