@@ -230,7 +230,8 @@ class TestWorker:
         server._worker(task_id, datetime.datetime(2026, 5, 24, 12, 0), '2026-05-24')
         t = server._tasks[task_id]
         assert t['status'] == 'error'
-        assert '429' in t['error']
+        # The raw '429' from arXiv is humanized into a friendlier message.
+        assert 'rate-limiting' in t['error']
 
     def test_llm_error_marks_task_error(
         self, reports_dir: Path, monkeypatch: pytest.MonkeyPatch
@@ -359,3 +360,83 @@ class TestStream:
         assert 'event: done' in body
         assert '429' in body
         assert 'Wait 5-15 minutes' in body
+
+
+class TestHumanizeFetchError:
+    def test_429_message_is_compacted(self) -> None:
+        import server
+
+        msg = server._humanize_fetch_error(
+            RuntimeError(
+                'Page request resulted in HTTP 429 '
+                '(https://export.arxiv.org/api/query?search_query=cat%3Aastro-ph.he&...)'
+            )
+        )
+        assert 'arXiv API is rate-limiting' in msg
+        assert 'http' not in msg.lower()
+        assert 'export.arxiv.org' not in msg
+
+    def test_cooldown_message_passthrough(self) -> None:
+        import server
+
+        cd_msg = 'arXiv API cooldown active (set after a recent HTTP 429); retry in up to 30 min.'
+        assert server._humanize_fetch_error(RuntimeError(cd_msg)) == cd_msg
+
+    def test_unrelated_message_untouched(self) -> None:
+        import server
+
+        assert server._humanize_fetch_error(ValueError('some other error')) == 'some other error'
+
+
+class TestControls:
+    def test_no_cooldown_renders_active_form(self, client: TestClient) -> None:
+        r = client.get('/controls')
+        assert r.status_code == 200
+        # Active form: HTMX-bound, not aria-disabled.
+        assert 'hx-post="/generate"' in r.text
+        assert 'aria-disabled' not in r.text
+        assert 'Rate-limited' not in r.text
+        assert 'Generate report' in r.text
+
+    def test_cooldown_renders_disabled_state(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import server
+
+        monkeypatch.setattr(server, '_arxiv_cooldown_remaining', lambda: 12 * 60)
+        r = client.get('/controls')
+        assert r.status_code == 200
+        assert 'Rate-limited' in r.text
+        assert 'disabled' in r.text
+        # No active POST form when disabled.
+        assert 'hx-post="/generate"' not in r.text
+        assert 'retry in ~12 min' in r.text
+
+    def test_active_query_prefills_date_input(self, client: TestClient) -> None:
+        r = client.get('/controls?active=2026-05-20')
+        assert 'value="2026-05-20"' in r.text
+
+
+class TestGenerateCooldownGuard:
+    def test_post_during_cooldown_returns_error_panel(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import server
+
+        # Stub the worker so we can detect whether the route actually
+        # tried to spawn one (it must NOT during cooldown).
+        spawned = {'flag': False}
+
+        def fake_worker(task_id, as_of, date_str):
+            spawned['flag'] = True
+
+        monkeypatch.setattr(server, '_arxiv_cooldown_remaining', lambda: 7 * 60)
+        monkeypatch.setattr(server, '_worker', fake_worker)
+
+        r = client.post('/generate', data={'date': '2026-05-20'})
+        assert r.status_code == 200
+        assert 'alert-error' in r.text
+        assert 'rate-limiting' in r.text.lower() or 'rate-limited' in r.text.lower()
+        assert 'retry in ~7 min' in r.text
+        # Critically, no worker thread should have started.
+        assert spawned['flag'] is False

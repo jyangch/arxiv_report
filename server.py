@@ -7,6 +7,7 @@ import html as _html
 import os
 import re
 import threading
+import time
 import uuid
 
 from fastapi import FastAPI, Form, HTTPException, Request
@@ -14,7 +15,12 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Stre
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from core.fetcher import ARXIV_TZ, fetch_arxiv_papers
+from core.fetcher import (
+    ARXIV_COOLDOWN_PATH,
+    ARXIV_COOLDOWN_SECONDS,
+    ARXIV_TZ,
+    fetch_arxiv_papers,
+)
 from core.providers import generate_report
 from core.render import REPORTS_DIR, save_html
 
@@ -61,6 +67,33 @@ def _report_path(date: datetime.date) -> str:
     return os.path.join(REPORTS_DIR, f'arXiv_astro_ph_HE_daily_report_{date.isoformat()}.html')
 
 
+def _arxiv_cooldown_remaining() -> int:
+    """Seconds until the arXiv rate-limit cooldown expires; 0 if not active.
+
+    The cooldown file is written by ``core.fetcher`` whenever the arXiv API
+    returns HTTP 429, regardless of whether the requesting window was recent
+    or historical. While the cooldown is active, the UI disables Generate
+    instead of letting the user hammer arXiv into a longer block.
+    """
+    try:
+        with open(ARXIV_COOLDOWN_PATH) as f:
+            until = float(f.read().strip())
+    except (FileNotFoundError, ValueError, OSError):
+        return 0
+    return max(0, int(until - time.time()))
+
+
+def _humanize_fetch_error(exc: Exception) -> str:
+    """Trim ugly arXiv API exception text to something humans want to read."""
+    msg = str(exc)
+    if 'cooldown active' in msg.lower():
+        return msg  # already formatted by core.fetcher
+    if '429' in msg:
+        mins = (ARXIV_COOLDOWN_SECONDS + 59) // 60
+        return f'arXiv API is rate-limiting requests. Cooldown set; retry in up to {mins} min.'
+    return msg
+
+
 _tasks: dict[str, dict] = {}
 # task_id -> {
 #   'status':      'running' | 'done' | 'error',
@@ -84,9 +117,10 @@ def _worker(task_id: str, as_of: datetime.datetime, date_str: str) -> None:
     try:
         papers = fetch_arxiv_papers(as_of=as_of)
     except Exception as exc:
-        task['error'] = str(exc)
+        clean = _humanize_fetch_error(exc)
+        task['error'] = clean
         task['status'] = 'error'
-        task['messages'].append(f'Fetch failed: {exc}')
+        task['messages'].append(f'Fetch failed: {clean}')
         return
 
     task['messages'].append(f'Found {len(papers)} papers')
@@ -125,6 +159,7 @@ def _render_home(
         context={
             'selected_date': selected_date,
             'main_content': main_content,
+            'controls_html': _render_controls(selected_date),
         },
     )
 
@@ -132,6 +167,15 @@ def _render_home(
 def _render_partial(name: str, **ctx) -> str:
     """Render a partial template to a string (no Response wrapping)."""
     return templates.get_template(name).render(**ctx)
+
+
+def _render_controls(selected_date: datetime.date | None) -> str:
+    """Render the sidebar Generate-form fragment, accounting for cooldown."""
+    return _render_partial(
+        'partials/controls.html',
+        selected_date=selected_date,
+        cooldown_remaining=_arxiv_cooldown_remaining(),
+    )
 
 
 def _terminal_fragment(task: dict) -> str:
@@ -202,6 +246,12 @@ def generate(date: str = Form(...)) -> HTMLResponse:
     if parsed is None:
         raise HTTPException(status_code=400, detail='Invalid date')
 
+    cooldown_s = _arxiv_cooldown_remaining()
+    if cooldown_s > 0:
+        mins = (cooldown_s + 59) // 60
+        msg = f'arXiv API is rate-limiting requests. Cooldown active; retry in ~{mins} min.'
+        return HTMLResponse(_render_partial('partials/error_panel.html', message=msg))
+
     as_of = ARXIV_TZ.localize(datetime.datetime.combine(parsed, datetime.time(hour=12)))
     task_id = str(uuid.uuid4())
     _tasks[task_id] = {
@@ -255,3 +305,10 @@ def recent(active: str = '') -> HTMLResponse:
     dates = _list_recent_dates(limit=30)
     html = _render_partial('partials/recent_list.html', dates=dates, active=active)
     return HTMLResponse(html)
+
+
+@app.get('/controls', response_class=HTMLResponse)
+def controls(active: str = '') -> HTMLResponse:
+    """Sidebar Generate-form fragment; polled to reflect cooldown state."""
+    selected = _parse_date(active)
+    return HTMLResponse(_render_controls(selected))

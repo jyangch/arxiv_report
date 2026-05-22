@@ -288,15 +288,25 @@ def fetch_arxiv_papers(as_of: datetime.datetime | None = None) -> list[dict]:
     if window_is_recent and _is_in_cooldown():
         print('⏭️  Skipping api (recent 429 cooldown active); going straight to RSS.')
         papers = _fetch_via_rss()
+    elif _is_in_cooldown() and not window_is_recent:
+        # Historical windows have no RSS fallback, but we still respect the
+        # cooldown so repeat clicks don't hammer arXiv while it's throttling us.
+        raise RuntimeError(
+            f'arXiv API cooldown active (set after a recent HTTP 429); '
+            f'retry in up to {ARXIV_COOLDOWN_SECONDS // 60} min.'
+        )
     else:
         try:
             papers = _fetch_via_api(start_t, end_t)
         except (arxiv.HTTPError, _UrllibHTTPError) as e:
             status = getattr(e, 'status', None) or getattr(e, 'code', None)
-            if status != 429 or not window_is_recent:
+            if status != 429:
                 raise
             _mark_cooldown()
             print(f'⚠️  api returned 429; cooldown set for {ARXIV_COOLDOWN_SECONDS // 60} min.')
+            if not window_is_recent:
+                # No RSS fallback available for historical windows -- propagate.
+                raise
             papers = _fetch_via_rss()
 
     papers.sort(key=lambda p: _extract_arxiv_id(p.get('url', '')) or '', reverse=True)

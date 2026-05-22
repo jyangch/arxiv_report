@@ -159,6 +159,24 @@ label[for="date-input"] {
 }
 .btn-primary:active { transform: translateY(1px); }
 .btn-primary:disabled {
+  cursor: not-allowed;
+  background: rgba(120, 120, 130, 0.10);
+  border-color: rgba(120, 120, 130, 0.22);
+  color: var(--text-muted);
+  box-shadow: none;
+}
+.btn-primary:disabled:hover {
+  background: rgba(120, 120, 130, 0.10);
+  box-shadow: none;
+}
+
+.cooldown-hint {
+  margin: 8px 0 0;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+.btn-primary:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }

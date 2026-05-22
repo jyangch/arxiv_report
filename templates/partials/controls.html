@@ -1,0 +1,37 @@
+{% set today_iso = selected_date.isoformat() if selected_date else '' %}
+{% if cooldown_remaining > 0 %}
+  {% set mins = (cooldown_remaining + 59) // 60 %}
+  <form id="generate-form" aria-disabled="true">
+    <label for="date-input">Date (ET)</label>
+    <input id="date-input"
+           type="date"
+           name="date"
+           value="{{ today_iso }}"
+           disabled />
+    <button type="button" class="btn-primary" disabled
+            title="arXiv API is rate-limited; Generate is paused.">
+      <span>Rate-limited &middot; retry in ~{{ mins }} min</span>
+    </button>
+  </form>
+  <p class="cooldown-hint">
+    arXiv API returned HTTP 429. The button will reactivate automatically once
+    the cooldown expires.
+  </p>
+{% else %}
+  <form id="generate-form"
+        hx-post="/generate"
+        hx-target="#main-area"
+        hx-swap="innerHTML"
+        hx-disabled-elt="find button">
+    <label for="date-input">Date (ET)</label>
+    <input id="date-input"
+           type="date"
+           name="date"
+           value="{{ today_iso }}"
+           required />
+    <button type="submit" class="btn-primary">
+      <span>Generate report</span>
+      <span class="btn-arrow" aria-hidden="true">&rarr;</span>
+    </button>
+  </form>
+{% endif %}

@@ -9,7 +9,7 @@
   <link rel="stylesheet"
         href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" />
   <script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js"></script>
-  <link rel="stylesheet" href="/static/style.css?v=14" />
+  <link rel="stylesheet" href="/static/style.css?v=15" />
   {% block head %}{% endblock %}
 </head>
 <body>
@@ -45,22 +45,12 @@
     </header>
 
     <section class="sidebar-block">
-      <form id="generate-form"
-            hx-post="/generate"
-            hx-target="#main-area"
-            hx-swap="innerHTML"
-            hx-disabled-elt="find button">
-        <label for="date-input">Date (ET)</label>
-        <input id="date-input"
-               type="date"
-               name="date"
-               value="{{ selected_date.isoformat() if selected_date else '' }}"
-               required />
-        <button type="submit" class="btn-primary">
-          <span>Generate report</span>
-          <span class="btn-arrow" aria-hidden="true">&rarr;</span>
-        </button>
-      </form>
+      <div id="controls"
+           hx-get="/controls?active={{ selected_date.isoformat() if selected_date else '' }}"
+           hx-trigger="every 30s, generate-done from:body"
+           hx-swap="innerHTML">
+        {{ controls_html|safe }}
+      </div>
     </section>
 
     <section class="sidebar-block">
