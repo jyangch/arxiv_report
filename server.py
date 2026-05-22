@@ -10,7 +10,9 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from arxiv_report.render import REPORTS_DIR
+from arxiv_report.fetcher import fetch_arxiv_papers
+from arxiv_report.providers import generate_report
+from arxiv_report.render import REPORTS_DIR, save_html
 
 _DATE_RE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
 _REPORT_FILENAME_RE = re.compile(r'arXiv_astro_ph_HE_daily_report_(\d{4}-\d{2}-\d{2})\.html$')
@@ -53,6 +55,56 @@ def _list_recent_dates(limit: int = 30) -> list[datetime.date]:
 def _report_path(date: datetime.date) -> str:
     """Filesystem path for the report HTML on this date."""
     return os.path.join(REPORTS_DIR, f'arXiv_astro_ph_HE_daily_report_{date.isoformat()}.html')
+
+
+_tasks: dict[str, dict] = {}
+# task_id -> {
+#   'status':      'running' | 'done' | 'error',
+#   'date':        'YYYY-MM-DD',
+#   'messages':    list[str],
+#   'report_path': str | None,
+#   'provider':    str | None,
+#   'error':       str | None,
+# }
+
+
+def _worker(task_id: str, as_of: datetime.datetime, date_str: str) -> None:
+    """Run the full fetch -> LLM -> save flow, updating ``_tasks[task_id]``.
+
+    Each stage appends a one-line status message to ``task['messages']``
+    so the SSE stream can surface progress incrementally. Exceptions in
+    any stage land in ``task['error']`` and set ``status='error'``.
+    """
+    task = _tasks[task_id]
+    task['messages'].append('Fetching arXiv papers...')
+    try:
+        papers = fetch_arxiv_papers(as_of=as_of)
+    except Exception as exc:
+        task['error'] = str(exc)
+        task['status'] = 'error'
+        task['messages'].append(f'Fetch failed: {exc}')
+        return
+
+    task['messages'].append(f'Found {len(papers)} papers')
+    if not papers:
+        task['status'] = 'done'
+        task['messages'].append('No papers for this date (weekend / holiday / out of range).')
+        return
+
+    task['messages'].append('Calling LLM (may take several minutes)...')
+    try:
+        report, provider = generate_report(papers)
+    except Exception as exc:
+        task['error'] = str(exc)
+        task['status'] = 'error'
+        task['messages'].append(f'LLM failed: {exc}')
+        return
+
+    task['provider'] = provider
+    task['messages'].append(f'Provider: {provider}')
+    task['report_path'] = save_html(papers, report, provider, as_of=as_of)
+    task['status'] = 'done'
+    task['messages'].append('Done.')
 
 
 app = FastAPI(title='arXiv astro-ph.HE Daily Report')

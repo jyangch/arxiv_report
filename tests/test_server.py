@@ -4,6 +4,7 @@ import datetime
 from pathlib import Path
 
 from fastapi.testclient import TestClient
+import pytest
 
 from server import _list_recent_dates, _parse_date
 
@@ -135,3 +136,123 @@ class TestRecent:
         (reports_dir / 'arXiv_astro_ph_HE_daily_report_2026-05-19.html').write_text('x')
         r = client.get('/recent?active=2026-05-19')
         assert 'is-active' in r.text
+
+
+class TestWorker:
+    def test_success_path(self, reports_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        import server
+
+        monkeypatch.setattr(server, 'fetch_arxiv_papers', lambda as_of: [{'title': 't'}])
+        monkeypatch.setattr(server, 'generate_report', lambda papers: ('<p>body</p>', 'claude'))
+        save_called = {}
+
+        def fake_save(papers, report, provider, as_of=None):
+            save_called.update(papers=papers, report=report, provider=provider, as_of=as_of)
+            return '/fake/path.html'
+
+        monkeypatch.setattr(server, 'save_html', fake_save)
+        task_id = 'fixed-id'
+        server._tasks[task_id] = {
+            'status': 'running',
+            'date': '2026-05-22',
+            'messages': [],
+            'report_path': None,
+            'provider': None,
+            'error': None,
+        }
+        server._worker(
+            task_id,
+            datetime.datetime(2026, 5, 22, 12, 0),
+            '2026-05-22',
+        )
+        t = server._tasks[task_id]
+        assert t['status'] == 'done'
+        assert t['provider'] == 'claude'
+        assert t['report_path'] == '/fake/path.html'
+        assert t['error'] is None
+        assert any('Fetching' in m for m in t['messages'])
+        assert any('Calling LLM' in m for m in t['messages'])
+        assert save_called['provider'] == 'claude'
+
+    def test_empty_papers_short_circuits(
+        self, reports_dir: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import server
+
+        monkeypatch.setattr(server, 'fetch_arxiv_papers', lambda as_of: [])
+        called = {'gen': False, 'save': False}
+        monkeypatch.setattr(
+            server,
+            'generate_report',
+            lambda papers: called.update(gen=True) or ('x', 'p'),
+        )
+        monkeypatch.setattr(
+            server,
+            'save_html',
+            lambda *a, **k: called.update(save=True) or '/p',
+        )
+        task_id = 'fixed-id-empty'
+        server._tasks[task_id] = {
+            'status': 'running',
+            'date': '2026-05-23',
+            'messages': [],
+            'report_path': None,
+            'provider': None,
+            'error': None,
+        }
+        server._worker(task_id, datetime.datetime(2026, 5, 23, 12, 0), '2026-05-23')
+        t = server._tasks[task_id]
+        assert t['status'] == 'done'
+        assert t['report_path'] is None
+        assert not called['gen']
+        assert not called['save']
+        assert any('No papers' in m for m in t['messages'])
+
+    def test_fetch_error_marks_task_error(
+        self, reports_dir: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import server
+
+        def boom(as_of):
+            raise RuntimeError('429 Too Many Requests')
+
+        monkeypatch.setattr(server, 'fetch_arxiv_papers', boom)
+        task_id = 'fixed-id-fetch'
+        server._tasks[task_id] = {
+            'status': 'running',
+            'date': '2026-05-24',
+            'messages': [],
+            'report_path': None,
+            'provider': None,
+            'error': None,
+        }
+        server._worker(task_id, datetime.datetime(2026, 5, 24, 12, 0), '2026-05-24')
+        t = server._tasks[task_id]
+        assert t['status'] == 'error'
+        assert '429' in t['error']
+
+    def test_llm_error_marks_task_error(
+        self, reports_dir: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import server
+
+        monkeypatch.setattr(server, 'fetch_arxiv_papers', lambda as_of: [{'title': 't'}])
+
+        def boom(papers):
+            raise RuntimeError('All providers failed.')
+
+        monkeypatch.setattr(server, 'generate_report', boom)
+        monkeypatch.setattr(server, 'save_html', lambda *a, **k: '/p')
+        task_id = 'fixed-id-llm'
+        server._tasks[task_id] = {
+            'status': 'running',
+            'date': '2026-05-25',
+            'messages': [],
+            'report_path': None,
+            'provider': None,
+            'error': None,
+        }
+        server._worker(task_id, datetime.datetime(2026, 5, 25, 12, 0), '2026-05-25')
+        t = server._tasks[task_id]
+        assert t['status'] == 'error'
+        assert 'providers failed' in t['error']
