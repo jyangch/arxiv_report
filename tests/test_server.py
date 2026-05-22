@@ -256,3 +256,41 @@ class TestWorker:
         t = server._tasks[task_id]
         assert t['status'] == 'error'
         assert 'providers failed' in t['error']
+
+
+class TestGenerate:
+    def test_invalid_date_returns_400(self, client: TestClient) -> None:
+        r = client.post('/generate', data={'date': 'foo'})
+        assert r.status_code == 400
+
+    def test_starts_task_and_returns_panel(
+        self,
+        client: TestClient,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        import threading
+
+        import server
+
+        # Block the worker thread on an event so we can observe the
+        # 'running' state in _tasks before it completes.
+        started = threading.Event()
+        release = threading.Event()
+
+        def fake_worker(task_id, as_of, date_str):
+            started.set()
+            release.wait(timeout=5)
+            server._tasks[task_id]['status'] = 'done'
+
+        monkeypatch.setattr(server, '_worker', fake_worker)
+        r = client.post('/generate', data={'date': '2026-05-22'})
+        assert r.status_code == 200
+        assert 'status-panel' in r.text
+        assert 'EventSource' in r.text
+        # The task id is embedded in the SSE script.
+        assert '/generate/stream/' in r.text
+        assert started.wait(timeout=2)
+        # Exactly one task registered with status 'running' before we let go.
+        running = [t for t in server._tasks.values() if t['status'] == 'running']
+        assert len(running) == 1
+        release.set()

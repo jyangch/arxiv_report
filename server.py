@@ -4,13 +4,15 @@ import datetime
 import glob
 import os
 import re
+import threading
+import uuid
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from arxiv_report.fetcher import fetch_arxiv_papers
+from arxiv_report.fetcher import ARXIV_TZ, fetch_arxiv_papers
 from arxiv_report.providers import generate_report
 from arxiv_report.render import REPORTS_DIR, save_html
 
@@ -167,6 +169,28 @@ def report_raw(date: str) -> FileResponse:
     if not os.path.exists(path):
         raise HTTPException(status_code=404, detail='Report not found')
     return FileResponse(path, media_type='text/html')
+
+
+@app.post('/generate', response_class=HTMLResponse)
+def generate(date: str = Form(...)) -> HTMLResponse:
+    """Spawn a background generation task and return the running panel."""
+    parsed = _parse_date(date)
+    if parsed is None:
+        raise HTTPException(status_code=400, detail='Invalid date')
+
+    as_of = ARXIV_TZ.localize(datetime.datetime.combine(parsed, datetime.time(hour=12)))
+    task_id = str(uuid.uuid4())
+    _tasks[task_id] = {
+        'status': 'running',
+        'date': parsed.isoformat(),
+        'messages': [],
+        'report_path': None,
+        'provider': None,
+        'error': None,
+    }
+    threading.Thread(target=_worker, args=(task_id, as_of, parsed.isoformat()), daemon=True).start()
+    html = _render_partial('partials/status_panel.html', task_id=task_id)
+    return HTMLResponse(html)
 
 
 @app.get('/recent', response_class=HTMLResponse)
