@@ -2,6 +2,7 @@
 
 import datetime
 from pathlib import Path
+import uuid
 
 from fastapi.testclient import TestClient
 import pytest
@@ -294,3 +295,67 @@ class TestGenerate:
         running = [t for t in server._tasks.values() if t['status'] == 'running']
         assert len(running) == 1
         release.set()
+
+
+class TestStream:
+    def _seed_task(self, status: str, **extra) -> str:
+        import server
+
+        task_id = str(uuid.uuid4())
+        server._tasks[task_id] = {
+            'status': status,
+            'date': '2026-05-22',
+            'messages': extra.get('messages', []),
+            'report_path': extra.get('report_path'),
+            'provider': extra.get('provider'),
+            'error': extra.get('error'),
+        }
+        return task_id
+
+    def test_unknown_task_emits_done_event(self, client: TestClient) -> None:
+        with client.stream('GET', '/generate/stream/nope') as r:
+            assert r.status_code == 200
+            body = ''.join(chunk for chunk in r.iter_text())
+        assert 'event: done' in body
+        assert 'Task not found' in body
+
+    def test_done_with_report_emits_iframe_fragment(
+        self, client: TestClient, reports_dir: Path
+    ) -> None:
+        (reports_dir / 'arXiv_astro_ph_HE_daily_report_2026-05-22.html').write_text('x')
+        task_id = self._seed_task(
+            'done',
+            messages=['Fetching arXiv papers...', 'Done.'],
+            report_path='ignored',
+            provider='claude',
+        )
+        with client.stream('GET', f'/generate/stream/{task_id}') as r:
+            body = ''.join(chunk for chunk in r.iter_text())
+        assert 'event: done' in body
+        assert 'src="/r/2026-05-22/raw"' in body
+        # Each message is sent as a separate data line.
+        assert 'Fetching arXiv papers' in body
+
+    def test_done_empty_emits_empty_panel(self, client: TestClient) -> None:
+        task_id = self._seed_task(
+            'done',
+            messages=['No papers for this date (weekend / holiday / out of range).'],
+            report_path=None,
+        )
+        with client.stream('GET', f'/generate/stream/{task_id}') as r:
+            body = ''.join(chunk for chunk in r.iter_text())
+        assert 'event: done' in body
+        assert 'No papers' in body
+        assert 'src=' not in body  # no iframe
+
+    def test_error_emits_error_panel(self, client: TestClient) -> None:
+        task_id = self._seed_task(
+            'error',
+            messages=['Fetching arXiv papers...', 'Fetch failed: 429'],
+            error='429 Too Many Requests',
+        )
+        with client.stream('GET', f'/generate/stream/{task_id}') as r:
+            body = ''.join(chunk for chunk in r.iter_text())
+        assert 'event: done' in body
+        assert '429' in body
+        assert 'Wait 5-15 minutes' in body

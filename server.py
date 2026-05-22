@@ -1,14 +1,16 @@
 """FastAPI web UI for the arxiv_report daily report generator."""
 
+import asyncio
 import datetime
 import glob
+import html as _html
 import os
 import re
 import threading
 import uuid
 
 from fastapi import FastAPI, Form, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -132,6 +134,28 @@ def _render_partial(name: str, **ctx) -> str:
     return templates.get_template(name).render(**ctx)
 
 
+def _terminal_fragment(task: dict) -> str:
+    """The HTML fragment shipped in the SSE 'done' event."""
+    if task['status'] == 'error':
+        return _render_partial(
+            'partials/error_panel.html', message=task['error'] or 'Unknown error'
+        )
+    if task['report_path'] is None:
+        return _render_partial('partials/empty_panel.html', date=task['date'])
+    return _render_partial('partials/report_frame.html', date=task['date'])
+
+
+def _sse_pack_fragment(event: str, html: str) -> str:
+    """Encode a possibly-multiline HTML fragment as a single SSE event.
+
+    Each newline becomes a separate ``data:`` line; the browser
+    reassembles them with newline separators back into the same HTML.
+    """
+    lines = html.replace('\r\n', '\n').split('\n')
+    data_block = '\n'.join(f'data: {line}' for line in lines)
+    return f'event: {event}\n{data_block}\n\n'
+
+
 app.mount('/static', StaticFiles(directory='static'), name='static')
 
 
@@ -191,6 +215,38 @@ def generate(date: str = Form(...)) -> HTMLResponse:
     threading.Thread(target=_worker, args=(task_id, as_of, parsed.isoformat()), daemon=True).start()
     html = _render_partial('partials/status_panel.html', task_id=task_id)
     return HTMLResponse(html)
+
+
+@app.get('/generate/stream/{task_id}')
+async def generate_stream(task_id: str, request: Request) -> StreamingResponse:
+    """SSE: stream worker log lines, then a single 'done' event with the result."""
+
+    async def gen():
+        sent = 0
+        while True:
+            if await request.is_disconnected():
+                break
+            task = _tasks.get(task_id)
+            if task is None:
+                yield _sse_pack_fragment(
+                    'done',
+                    '<div class="alert alert-error">Task not found.</div>',
+                )
+                return
+            while sent < len(task['messages']):
+                safe = _html.escape(task['messages'][sent])
+                sent += 1
+                yield f'data: <div class="log-line">{safe}</div>\n\n'
+            if task['status'] in ('done', 'error'):
+                yield _sse_pack_fragment('done', _terminal_fragment(task))
+                return
+            await asyncio.sleep(0.5)
+
+    return StreamingResponse(
+        gen(),
+        media_type='text/event-stream',
+        headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'},
+    )
 
 
 @app.get('/recent', response_class=HTMLResponse)
