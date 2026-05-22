@@ -77,3 +77,24 @@ class TestRawRoute:
     def test_invalid_date_returns_400(self, client: TestClient) -> None:
         r = client.get('/r/foo/raw')
         assert r.status_code == 400
+
+
+class TestDateRoute:
+    def test_existing_report_renders_iframe(self, client: TestClient, reports_dir: Path) -> None:
+        (reports_dir / 'arXiv_astro_ph_HE_daily_report_2026-05-22.html').write_text('x')
+        r = client.get('/r/2026-05-22')
+        assert r.status_code == 200
+        # iframe wired to the raw endpoint for this date
+        assert 'src="/r/2026-05-22/raw"' in r.text
+        assert 'id="sidebar"' in r.text  # base template was rendered
+
+    def test_missing_report_renders_placeholder(self, client: TestClient) -> None:
+        r = client.get('/r/2099-01-01')
+        assert r.status_code == 200
+        assert 'No report for 2099-01-01 yet' in r.text
+        # No iframe -- placeholder only.
+        assert 'src="/r/2099-01-01/raw"' not in r.text
+
+    def test_invalid_date_returns_400(self, client: TestClient) -> None:
+        r = client.get('/r/foo')
+        assert r.status_code == 400

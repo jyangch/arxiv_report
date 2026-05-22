@@ -5,8 +5,8 @@ import glob
 import os
 import re
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -56,8 +56,43 @@ def _report_path(date: datetime.date) -> str:
 
 
 app = FastAPI(title='arXiv astro-ph.HE Daily Report')
-app.mount('/static', StaticFiles(directory='static'), name='static')
 templates = Jinja2Templates(directory='templates')
+
+
+def _render_home(
+    request: Request, selected_date: datetime.date | None, main_content: str
+) -> HTMLResponse:
+    """Render ``home.html`` with the given main-area content."""
+    return templates.TemplateResponse(
+        request=request,
+        name='home.html',
+        context={
+            'selected_date': selected_date,
+            'main_content': main_content,
+        },
+    )
+
+
+def _render_partial(name: str, **ctx) -> str:
+    """Render a partial template to a string (no Response wrapping)."""
+    return templates.get_template(name).render(**ctx)
+
+
+app.mount('/static', StaticFiles(directory='static'), name='static')
+
+
+@app.get('/r/{date}', response_class=HTMLResponse)
+def report_page(date: str, request: Request) -> HTMLResponse:
+    """Main page for a specific date. Renders even when the file is missing."""
+    parsed = _parse_date(date)
+    if parsed is None:
+        raise HTTPException(status_code=400, detail='Invalid date')
+    path = _report_path(parsed)
+    if os.path.exists(path):
+        main = _render_partial('partials/report_frame.html', date=parsed.isoformat())
+    else:
+        main = _render_partial('partials/placeholder.html', date=parsed.isoformat())
+    return _render_home(request, parsed, main)
 
 
 @app.get('/r/{date}/raw')
