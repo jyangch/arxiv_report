@@ -53,6 +53,13 @@ Icon?
 build/
 dist/
 
+# Tool caches
+.pytest_cache/
+.ruff_cache/
+
+# Claude Code session metadata (worktrees, settings, etc.)
+.claude/
+
 # Local-only docs and Claude Code project config
 docs/
 reports/
