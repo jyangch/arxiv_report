@@ -17,7 +17,7 @@ class TestParseDate:
         assert _parse_date('2026/05/22') is None
 
     def test_extra_components(self) -> None:
-        # fromisoformat will accept time suffixes — reject those.
+        # fromisoformat will accept time suffixes; reject those.
         assert _parse_date('2026-05-22T12:00') is None
 
     def test_empty(self) -> None:
