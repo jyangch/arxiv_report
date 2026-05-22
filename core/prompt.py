@@ -2,7 +2,7 @@
 
 import re
 
-from arxiv_report.pub_status import classify_pub_status
+from core.pub_status import classify_pub_status
 
 _ARXIV_DISPLAY_ID_RE = re.compile(r'/abs/([^/?#]+)')
 

@@ -34,7 +34,7 @@ Set API keys, models, and the Claude backend via environment variables (all opti
 | `OPENAI_API_KEY` | OpenAI API key | — |
 | `OPENAI_MODEL` | OpenAI model name | `gpt-5.4` |
 
-The CLI backend always uses the `opus` model alias (hardcoded in `providers.py`). The preferred LLM provider can be set via `PREFERRED_PROVIDER` in `arxiv_report/config.py` (`"claude"`, `"gemini"`, or `"openai"`). Defaults to `"claude"`.
+The CLI backend always uses the `opus` model alias (hardcoded in `providers.py`). The preferred LLM provider can be set via `PREFERRED_PROVIDER` in `core/config.py` (`"claude"`, `"gemini"`, or `"openai"`). Defaults to `"claude"`.
 
 ## Usage
 

@@ -8,7 +8,7 @@ import anthropic
 from google import genai
 from openai import OpenAI
 
-from arxiv_report.config import (
+from core.config import (
     CLAUDE_API_KEY,
     CLAUDE_BACKEND,
     CLAUDE_MODEL,
@@ -19,7 +19,7 @@ from arxiv_report.config import (
     OPENAI_MODEL,
     PREFERRED_PROVIDER,
 )
-from arxiv_report.prompt import build_prompt
+from core.prompt import build_prompt
 
 claude_client = anthropic.Anthropic(api_key=CLAUDE_API_KEY) if CLAUDE_API_KEY else None
 gemini_client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None

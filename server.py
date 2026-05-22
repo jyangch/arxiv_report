@@ -14,9 +14,9 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Stre
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from arxiv_report.fetcher import ARXIV_TZ, fetch_arxiv_papers
-from arxiv_report.providers import generate_report
-from arxiv_report.render import REPORTS_DIR, save_html
+from core.fetcher import ARXIV_TZ, fetch_arxiv_papers
+from core.providers import generate_report
+from core.render import REPORTS_DIR, save_html
 
 _DATE_RE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
 _REPORT_FILENAME_RE = re.compile(r'arXiv_astro_ph_HE_daily_report_(\d{4}-\d{2}-\d{2})\.html$')

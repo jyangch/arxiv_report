@@ -3,9 +3,9 @@
 import argparse
 import datetime
 
-from arxiv_report.fetcher import ARXIV_TZ, fetch_arxiv_papers
-from arxiv_report.providers import generate_report
-from arxiv_report.render import save_html
+from core.fetcher import ARXIV_TZ, fetch_arxiv_papers
+from core.providers import generate_report
+from core.render import save_html
 
 
 def _parse_as_of(date_str: str | None) -> datetime.datetime | None:

@@ -10,13 +10,13 @@ import pytest
 def reports_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Redirect ``REPORTS_DIR`` to a per-test tmp directory.
 
-    Patches both the source-of-truth constant in ``arxiv_report.render``
+    Patches both the source-of-truth constant in ``core.render``
     and the import-time copy in ``server``. Returns the tmp path so
     tests can pre-populate fake report files.
     """
     d = tmp_path / 'reports'
     d.mkdir()
-    monkeypatch.setattr('arxiv_report.render.REPORTS_DIR', str(d))
+    monkeypatch.setattr('core.render.REPORTS_DIR', str(d))
     monkeypatch.setattr('server.REPORTS_DIR', str(d))
     return d
 
