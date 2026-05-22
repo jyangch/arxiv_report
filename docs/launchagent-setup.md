@@ -137,3 +137,61 @@ syntax error -- check it with `plutil ~/Library/LaunchAgents/com.junyang.arxiv-r
   or local bookmarks that hit `http://localhost:8080`.
 - `reports/.cache/` and `reports/*.html` are gitignored; they accumulate in
   the working directory as you generate.
+
+## Daily auto-generation
+
+A second LaunchAgent at
+`~/Library/LaunchAgents/com.junyang.arxiv-report.daily.plist` POSTs to
+`/generate` at 12:00 local time every day with today's date, so a report is
+produced even on days the UI is never opened.
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.junyang.arxiv-report.daily</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/sh</string>
+        <string>-c</string>
+        <string>echo "[$(date)] daily trigger"; curl -fsS -X POST http://127.0.0.1:8080/generate --data-urlencode "date=$(date +%F)" >/dev/null</string>
+    </array>
+
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>12</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <false/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/junyang/Documents/python_works/arxiv_report/.daily-generate.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/junyang/Documents/python_works/arxiv_report/.daily-generate.log</string>
+</dict>
+</plist>
+```
+
+### Behaviour notes
+
+- The trigger relies on the main `com.junyang.arxiv-report` agent already
+  serving the UI on `127.0.0.1:8080`. If the service is down at noon the curl
+  call fails and the error lands in `.daily-generate.log`; launchd does not
+  retry until the next calendar firing.
+- If the laptop is asleep at 12:00, launchd fires the missed job once when
+  the machine wakes -- so a late-morning wake still gets a report.
+- `/generate` enforces the arXiv 429 cooldown server-side, so a scheduled
+  trigger that lands during a cooldown returns the error partial (logged, no
+  report) instead of queuing a doomed task.
+- To test without waiting for noon:
+  `launchctl start com.junyang.arxiv-report.daily`.
+- To change the time, edit the plist, then
+  `launchctl unload ~/Library/LaunchAgents/com.junyang.arxiv-report.daily.plist && launchctl load ~/Library/LaunchAgents/com.junyang.arxiv-report.daily.plist`.
