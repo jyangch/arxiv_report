@@ -10,12 +10,12 @@ Automatically fetches the latest papers from the arXiv `astro-ph.HE` (High Energ
 - Generates Chinese-language summaries for each paper, including research method tags and key physical findings
 - Supports Claude (CLI or API), Gemini, and OpenAI backends with automatic fallback on quota errors
 - Outputs a styled, self-contained HTML report (light/dark theme adaptive, internal anchor scrolling)
-- Optional Streamlit web UI with date picker and inline preview
+- FastAPI + HTMX web UI with date picker, per-date URLs, and live progress
 
 ## Installation
 
 ```bash
-pip install arxiv pytz anthropic google-genai openai streamlit
+pip install -r requirements.txt
 ```
 
 For the default Claude CLI backend, also install [Claude Code](https://claude.com/claude-code) and log in once with `claude /login` (choose the Anthropic Console / Pro / Max path).
@@ -53,15 +53,16 @@ export CLAUDE_API_KEY="your_api_key_here"
 python report.py
 ```
 
-### Web UI (Streamlit)
+### Web UI (FastAPI + HTMX)
 
 ```bash
-streamlit run app.py
+pip install -r requirements.txt
+uvicorn server:app --reload --port 8080
 ```
 
-Opens a browser tab with a two-column layout: pick a date and click Generate on the left; the rendered report appears inline on the right. Selecting any date that already has a saved file in `./reports/` loads that report immediately (no regeneration), so the same UI doubles as a browser for historical reports.
+Then open http://localhost:8080.
 
-For running the Streamlit app as a background macOS service, see [docs/launchagent-setup.md](docs/launchagent-setup.md).
+For running the web UI as a background macOS service, see [docs/launchagent-setup.md](docs/launchagent-setup.md). (Note: that doc references the old Streamlit command; update its command from `streamlit run app.py` to `uvicorn server:app --port 8080` if you use it.)
 
 ## Output Structure
 
