@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}arXiv astro-ph.HE Daily Report{% endblock %}</title>
+  <script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js"></script>
+  <link rel="stylesheet" href="/static/style.css?v=1" />
+  {% block head %}{% endblock %}
+</head>
+<body>
+  <aside id="sidebar">
+    <header class="sidebar-header">
+      <p class="kicker">arXiv · astro-ph.HE</p>
+      <h1 class="title">Daily Report</h1>
+    </header>
+
+    <section class="sidebar-block">
+      <form id="generate-form"
+            hx-post="/generate"
+            hx-target="#main-area"
+            hx-swap="innerHTML"
+            hx-disabled-elt="find button">
+        <label for="date-input">Date (ET)</label>
+        <input id="date-input"
+               type="date"
+               name="date"
+               value="{{ selected_date.isoformat() if selected_date else '' }}"
+               required />
+        <button type="submit" class="btn-primary">Generate report</button>
+      </form>
+    </section>
+
+    <section class="sidebar-block">
+      <h2 class="sidebar-h2">Recent</h2>
+      <div id="recent-list"
+           hx-get="/recent?active={{ selected_date.isoformat() if selected_date else '' }}"
+           hx-trigger="load, every 60s, generate-done from:body"
+           hx-swap="innerHTML">
+        <!-- populated by HTMX -->
+      </div>
+    </section>
+  </aside>
+
+  <main id="main-area">
+    {% block main %}{% endblock %}
+  </main>
+</body>
+</html>

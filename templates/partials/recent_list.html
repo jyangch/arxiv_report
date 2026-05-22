@@ -1,0 +1,10 @@
+<ul class="recent-list">
+  {% for d in dates %}
+    {% set iso = d.isoformat() %}
+    <li class="{% if iso == active %}is-active{% endif %}">
+      <a href="/r/{{ iso }}">{{ iso }}</a>
+    </li>
+  {% else %}
+    <li class="recent-empty">No reports yet.</li>
+  {% endfor %}
+</ul>
