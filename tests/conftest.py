@@ -29,4 +29,5 @@ def client(reports_dir: Path) -> TestClient:
     has already swapped the constants before ``app`` resolves them.
     """
     from server import app
+
     return TestClient(app)

@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from arxiv_report.render import REPORTS_DIR
+from arxiv_report.render import REPORTS_DIR  # noqa: F401
 
 app = FastAPI(title='arXiv astro-ph.HE Daily Report')
 app.mount('/static', StaticFiles(directory='static'), name='static')
