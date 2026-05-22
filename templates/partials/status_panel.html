@@ -1,0 +1,33 @@
+<div id="status-panel">
+  <h3>Running...</h3>
+  <div id="run-log" class="run-log" aria-live="polite"></div>
+  <div class="run-status-row">
+    <span class="spinner" aria-hidden="true"></span>
+    <span id="run-status-text">Connecting...</span>
+  </div>
+</div>
+<script>
+(function () {
+  const taskId = {{ task_id|tojson }};
+  const log = document.getElementById('run-log');
+  const statusText = document.getElementById('run-status-text');
+  const es = new EventSource('/generate/stream/' + taskId);
+
+  es.onmessage = function (e) {
+    log.insertAdjacentHTML('beforeend', e.data);
+    log.scrollTop = log.scrollHeight;
+    statusText.textContent = 'Running...';
+  };
+
+  es.addEventListener('done', function (e) {
+    es.close();
+    document.getElementById('main-area').innerHTML = e.data;
+    htmx.trigger(document.body, 'generate-done');
+  });
+
+  es.onerror = function () {
+    es.close();
+    statusText.textContent = 'Stream error -- refresh to see results.';
+  };
+})();
+</script>

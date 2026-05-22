@@ -58,6 +58,3 @@ docs/
 reports/
 CLAUDE.md
 
-# Streamlit logs and error files
-.streamlit.err
-.streamlit.log
