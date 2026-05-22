@@ -61,7 +61,8 @@ dist/
 .claude/
 
 # Local-only docs and Claude Code project config
-docs/
+docs/*
+!docs/launchagent-setup.md
 reports/
 CLAUDE.md
 
