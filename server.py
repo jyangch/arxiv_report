@@ -19,6 +19,7 @@ from core.fetcher import (
     ARXIV_COOLDOWN_PATH,
     ARXIV_COOLDOWN_SECONDS,
     ARXIV_TZ,
+    describe_empty_window,
     fetch_arxiv_papers,
 )
 from core.providers import generate_report
@@ -102,6 +103,7 @@ _tasks: dict[str, dict] = {}
 #   'report_path': str | None,
 #   'provider':    str | None,
 #   'error':       str | None,
+#   'empty_reason': str | None,  # set when a 'done' task found no papers
 # }
 
 
@@ -125,8 +127,10 @@ def _worker(task_id: str, as_of: datetime.datetime, date_str: str) -> None:
 
     task['messages'].append(f'Found {len(papers)} papers')
     if not papers:
+        reason = describe_empty_window(as_of=as_of)
+        task['empty_reason'] = reason
         task['status'] = 'done'
-        task['messages'].append('No papers for this date (weekend / holiday / out of range).')
+        task['messages'].append(f'No papers: {reason}')
         return
 
     task['messages'].append('Calling LLM (may take several minutes)...')
@@ -185,7 +189,11 @@ def _terminal_fragment(task: dict) -> str:
             'partials/error_panel.html', message=task['error'] or 'Unknown error'
         )
     if task['report_path'] is None:
-        return _render_partial('partials/empty_panel.html', date=task['date'])
+        return _render_partial(
+            'partials/empty_panel.html',
+            date=task['date'],
+            reason=task.get('empty_reason'),
+        )
     return _render_partial('partials/report_frame.html', date=task['date'])
 
 

@@ -7,6 +7,7 @@ python-multipart>=0.0.9
 # Existing arxiv_report runtime deps
 arxiv
 feedparser
+holidays
 pytz
 anthropic
 google-genai

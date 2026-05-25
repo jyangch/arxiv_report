@@ -208,6 +208,9 @@ class TestWorker:
         assert not called['gen']
         assert not called['save']
         assert any('No papers' in m for m in t['messages'])
+        # The empty result carries a specific reason, surfaced in the log.
+        assert t['empty_reason']
+        assert any(t['empty_reason'] in m for m in t['messages'])
 
     def test_fetch_error_marks_task_error(
         self, reports_dir: Path, monkeypatch: pytest.MonkeyPatch

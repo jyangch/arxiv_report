@@ -13,6 +13,7 @@ import urllib.request
 
 import arxiv
 import feedparser
+import holidays
 import pytz
 
 ARXIV_QUERY = 'cat:astro-ph.he'
@@ -22,6 +23,22 @@ ARXIV_RSS_URL = 'http://export.arxiv.org/rss/astro-ph.HE'
 ARXIV_CACHE_DIR = './reports/.cache'
 ARXIV_COOLDOWN_PATH = './reports/.cache/arxiv_api_cooldown'
 ARXIV_COOLDOWN_SECONDS = 30 * 60  # after a 429, skip the api for 30 minutes
+
+# Federal holidays arXiv actually defers announcements for. The `holidays`
+# library's US set also includes Washington's Birthday, Memorial Day, Columbus
+# Day, and Veterans Day, which arXiv does NOT observe -- so lookups are filtered
+# to this allowlist. Names match the holidays library's US labels (with any
+# `(observed)` suffix stripped). arXiv's ad-hoc year-end closures (e.g. Dec 29)
+# are not derivable from the library and are intentionally not modelled.
+_ARXIV_OBSERVED_HOLIDAYS = frozenset({
+    "New Year's Day",
+    'Martin Luther King Jr. Day',
+    'Juneteenth National Independence Day',
+    'Independence Day',
+    'Labor Day',
+    'Thanksgiving Day',
+    'Christmas Day',
+})
 
 # Abs-page metadata extraction patterns (see arxiv.org/abs/<id> markup).
 _ARXIV_ID_RE = re.compile(r'/abs/([^/?#]+?)(?:v\d+)?/?(?:[?#]|$)')
@@ -59,6 +76,53 @@ def get_arxiv_sync_window(
     end_time = now_et.replace(hour=14, minute=0, second=0, microsecond=0) - timedelta(days=1)
     start_time = end_time - timedelta(days=days_back)
     return start_time, end_time
+
+
+def _arxiv_holiday_name(day: datetime.date) -> str | None:
+    """Return the arXiv-observed holiday name for ``day``, or ``None``.
+
+    Wraps ``holidays.US`` but filters to the federal holidays arXiv actually
+    closes for (``_ARXIV_OBSERVED_HOLIDAYS``); other US holidays such as
+    Memorial Day return ``None`` because arXiv still announces on them.
+
+    Args:
+        day: Calendar date to classify.
+
+    Returns:
+        The holiday name (possibly with an ``(observed)`` suffix) when arXiv
+        defers announcements that day, else ``None``.
+    """
+    name = holidays.US(years=day.year).get(day)
+    if name and name.removesuffix(' (observed)') in _ARXIV_OBSERVED_HOLIDAYS:
+        return name
+    return None
+
+
+def describe_empty_window(as_of: datetime.datetime | None = None) -> str:
+    """Explain why the announcement date for ``as_of`` yielded no papers.
+
+    Classifies the announcement day (``as_of`` in ET) as a weekend, a known
+    arXiv holiday, or an unexpected weekday miss. Papers are queried by
+    submission window, so a real holiday still has submissions to announce;
+    an empty weekday result almost always means a transient fetch issue.
+
+    Args:
+        as_of: Reference timestamp; defaults to ``now`` in the Eastern timezone.
+
+    Returns:
+        A one-line, human-readable reason suitable for UI display.
+    """
+    now_et = as_of.astimezone(ARXIV_TZ) if as_of else datetime.datetime.now(ARXIV_TZ)
+    day = now_et.date()
+    if day.weekday() >= 5:
+        return f'{day:%A} {day:%Y-%m-%d} is a weekend; arXiv does not announce on weekends.'
+    holiday = _arxiv_holiday_name(day)
+    if holiday:
+        return f'{day:%Y-%m-%d} is {holiday}; arXiv defers announcements on this holiday.'
+    return (
+        f'No papers came back for {day:%Y-%m-%d}. That is unexpected for a weekday -- '
+        'arXiv was likely rate-limiting the fetch. Try generating again in a few minutes.'
+    )
 
 
 def _fmt_arxiv_date(dt: datetime.datetime) -> str:
@@ -310,6 +374,9 @@ def fetch_arxiv_papers(as_of: datetime.datetime | None = None) -> list[dict]:
             papers = _fetch_via_rss()
 
     papers.sort(key=lambda p: _extract_arxiv_id(p.get('url', '')) or '', reverse=True)
-    _save_cache(start_t, end_t, papers)
+    # Never cache an empty result: a degraded RSS fallback during a 429 can
+    # return [] and would otherwise mask the real window data on later runs.
+    if papers:
+        _save_cache(start_t, end_t, papers)
     print(f'✅ Found {len(papers)} papers within the sync window.')
     return papers
