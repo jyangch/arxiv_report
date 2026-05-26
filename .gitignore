@@ -60,9 +60,9 @@ dist/
 # Claude Code session metadata (worktrees, settings, etc.)
 .claude/
 
-# Local-only docs and Claude Code project config
-docs/*
-!docs/launchagent-setup.md
+# Local-only docs, tests, and Claude Code project config
+docs/
+tests/
 reports/
 CLAUDE.md
 
