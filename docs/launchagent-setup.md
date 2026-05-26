@@ -141,15 +141,28 @@ syntax error -- check it with `plutil ~/Library/LaunchAgents/com.junyang.arxiv-r
 ## Daily auto-generation
 
 A second LaunchAgent at
-`~/Library/LaunchAgents/com.junyang.arxiv-report.daily.plist` fires every 30
-minutes between 11:00 and 13:00 local on weekdays (Mon-Fri). Each firing first
-checks whether today's report already exists (HTTP GET `/r/$DATE/raw`) and
-skips `/generate` if it does, so once any attempt succeeds the remaining slots
-become no-ops and no Claude tokens are wasted. The multi-slot schedule exists
-to ride out arXiv 429 rate limits: if the 11:00 attempt is throttled, the
-30-minute cadence gives the cooldown (typically ~30 min) time to expire before
-the next retry. arXiv announces no papers on Saturday or Sunday, so weekends
-are skipped entirely.
+`~/Library/LaunchAgents/com.junyang.arxiv-report.daily.plist` fires on weekdays
+(Mon-Fri): every 30 minutes from 11:00 to 13:00, then hourly from 14:00 to
+18:00 local. Each firing first checks whether today's report already exists
+(HTTP GET `/r/$DATE/raw`) and skips `/generate` if it does, so once any attempt
+succeeds the remaining slots become no-ops and no Claude tokens are wasted
+(an empty/failed run saves no file, returns 404, and is correctly retried).
+
+The two bands serve different failure modes:
+
+- **Morning 30-min cadence (11:00-13:00)** rides out arXiv 429 rate limits: if
+  the 11:00 attempt is throttled, the 30-minute cadence gives the cooldown
+  (typically ~30 min) time to expire before the next retry.
+- **Afternoon hourly catch-up (14:00-18:00)** covers *holiday-delayed*
+  announcements. Local time is GMT+8, ~12 h ahead of US Eastern. arXiv normally
+  announces at 20:00 ET (≈08:00 local, so the morning band catches it), but a
+  US-holiday deferral can push the announcement into the early ET morning =
+  local afternoon. Observed on 2026-05-26 after Memorial Day: the listing
+  published ~02:54 ET ≈ 14:54 local, which only the afternoon slots catch. The
+  18:00 slot reaches ~05:00 ET even in winter (EST = GMT-5, local−13 h).
+
+arXiv announces no papers on Saturday or Sunday, so weekends are skipped
+entirely.
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -168,32 +181,58 @@ are skipped entirely.
 
     <key>StartCalendarInterval</key>
     <array>
-        <!-- Mon-Fri (Weekday 1-5) at 11:00, 11:30, 12:00, 12:30, 13:00. -->
+        <!-- Mon-Fri (Weekday 1-5): 11:00, 11:30, 12:00, 12:30, 13:00 (429 retry)
+             then 14:00, 15:00, 16:00, 17:00, 18:00 (holiday-delay catch-up). -->
         <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>11</integer><key>Minute</key><integer>0</integer></dict>
         <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>11</integer><key>Minute</key><integer>30</integer></dict>
         <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>12</integer><key>Minute</key><integer>0</integer></dict>
         <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>12</integer><key>Minute</key><integer>30</integer></dict>
         <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>13</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>14</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>15</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>16</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>17</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>18</integer><key>Minute</key><integer>0</integer></dict>
         <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>11</integer><key>Minute</key><integer>0</integer></dict>
         <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>11</integer><key>Minute</key><integer>30</integer></dict>
         <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>12</integer><key>Minute</key><integer>0</integer></dict>
         <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>12</integer><key>Minute</key><integer>30</integer></dict>
         <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>13</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>14</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>15</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>16</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>17</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>18</integer><key>Minute</key><integer>0</integer></dict>
         <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>11</integer><key>Minute</key><integer>0</integer></dict>
         <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>11</integer><key>Minute</key><integer>30</integer></dict>
         <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>12</integer><key>Minute</key><integer>0</integer></dict>
         <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>12</integer><key>Minute</key><integer>30</integer></dict>
         <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>13</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>14</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>15</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>16</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>17</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>18</integer><key>Minute</key><integer>0</integer></dict>
         <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>11</integer><key>Minute</key><integer>0</integer></dict>
         <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>11</integer><key>Minute</key><integer>30</integer></dict>
         <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>12</integer><key>Minute</key><integer>0</integer></dict>
         <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>12</integer><key>Minute</key><integer>30</integer></dict>
         <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>13</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>14</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>15</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>16</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>17</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>18</integer><key>Minute</key><integer>0</integer></dict>
         <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>11</integer><key>Minute</key><integer>0</integer></dict>
         <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>11</integer><key>Minute</key><integer>30</integer></dict>
         <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>12</integer><key>Minute</key><integer>0</integer></dict>
         <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>12</integer><key>Minute</key><integer>30</integer></dict>
         <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>13</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>14</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>15</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>16</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>17</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>18</integer><key>Minute</key><integer>0</integer></dict>
     </array>
 
     <key>RunAtLoad</key>
@@ -225,8 +264,8 @@ are skipped entirely.
   sidesteps the sandbox entirely.
 - `/generate` enforces the arXiv 429 cooldown server-side, so a scheduled
   trigger that lands during a cooldown returns the error partial (logged, no
-  report) instead of queuing a doomed task. The next 30-min slot retries.
-- If two slots overlap because a Claude generation takes more than 30 min
+  report) instead of queuing a doomed task. The next scheduled slot retries.
+- If two slots overlap because a Claude generation runs past the next slot
   (rare), both workers will run; the arXiv fetch is cached after the first,
   but the second will still spend Claude tokens. Not handled today -- add
   in-flight dedupe to `/generate` if it ever becomes a real problem.

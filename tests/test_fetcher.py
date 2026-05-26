@@ -1,8 +1,10 @@
 """Tests for the arXiv fetch window classifier and cache-poisoning guard."""
 
 import datetime
+from types import SimpleNamespace
 
 import pytest
+import pytz
 
 from core import fetcher
 
@@ -84,3 +86,119 @@ class TestEmptyResultNotCached:
 
         assert papers == one
         assert len(saved) == 1  # persisted exactly once
+
+
+class TestSyncWindow:
+    """The window must equal the arXiv listing actually dated each weekday.
+
+    arXiv announces Sunday-Thursday at 20:00 ET; the weekend's submissions
+    (Fri 14:00 -> Mon 14:00) are bundled into the listing dated *Tuesday*, not
+    Monday. The reach-back therefore belongs on Tuesday.
+    """
+
+    def _w(self, y: int, m: int, d: int) -> tuple[tuple, tuple]:
+        s, e = fetcher.get_arxiv_sync_window(_et(y, m, d))
+        return (s.month, s.day, s.hour), (e.month, e.day, e.hour)
+
+    def test_monday_targets_thu_to_fri(self) -> None:
+        # 2026-05-18 is a Monday; its listing is Thu 14:00 -> Fri 14:00.
+        assert self._w(2026, 5, 18) == ((5, 14, 14), (5, 15, 14))
+
+    def test_tuesday_targets_fri_to_mon(self) -> None:
+        # 2026-05-19 is a Tuesday; its listing is the weekend bundle Fri->Mon.
+        assert self._w(2026, 5, 19) == ((5, 15, 14), (5, 18, 14))
+
+    def test_wednesday_targets_mon_to_tue(self) -> None:
+        assert self._w(2026, 5, 20) == ((5, 18, 14), (5, 19, 14))
+
+    def test_thursday_targets_tue_to_wed(self) -> None:
+        assert self._w(2026, 5, 21) == ((5, 19, 14), (5, 20, 14))
+
+    def test_friday_targets_wed_to_thu(self) -> None:
+        assert self._w(2026, 5, 22) == ((5, 20, 14), (5, 21, 14))
+
+    def test_weekend_is_empty(self) -> None:
+        for day in (23, 24):  # Saturday, Sunday
+            s, e = fetcher.get_arxiv_sync_window(_et(2026, 5, day))
+            assert s >= e
+
+
+class TestParseAbsSubmitted:
+    def test_parses_v1_utc(self) -> None:
+        html = (
+            '<div class="submission-history">'
+            '<b>[v1]</b> <span>Thu, 21 May 2026 18:00:32 UTC</span> (12 KB)'
+            '</div>'
+        )
+        assert fetcher._parse_abs_submitted(html) == pytz.UTC.localize(
+            datetime.datetime(2026, 5, 21, 18, 0, 32)
+        )
+
+    def test_returns_none_when_absent(self) -> None:
+        assert fetcher._parse_abs_submitted('<html>no history</html>') is None
+
+
+class TestRssWindowFilter:
+    """RSS carries only the latest announcement; it must be filtered to the
+    requested window so a stale (not-yet-refreshed) feed yields [], not
+    yesterday's papers."""
+
+    def _entry(self, aid: str, title: str) -> dict:
+        # feedparser entries support both ``entry['k']`` and ``entry.k``.
+        class _FeedDict(dict):
+            __getattr__ = dict.__getitem__
+
+        return _FeedDict(
+            title=title,
+            link=f'http://arxiv.org/abs/{aid}',
+            arxiv_announce_type='new',
+            summary='s',
+            tags=[{'term': 'astro-ph.HE'}],
+            authors=[{'name': 'A'}],
+            links=[],
+        )
+
+    def _patch_feed(self, monkeypatch: pytest.MonkeyPatch, entries: list) -> None:
+        fake = SimpleNamespace(bozo=False, entries=entries, feed={})
+        monkeypatch.setattr(fetcher.feedparser, 'parse', lambda url: fake)
+
+    def test_drops_papers_outside_window(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self._patch_feed(
+            monkeypatch,
+            [self._entry('2605.99001', 'In window'), self._entry('2605.99002', 'Too old')],
+        )
+        dates = {
+            '2605.99001': _et(2026, 5, 24, 10),  # inside Fri->Mon window
+            '2605.99002': _et(2026, 5, 21, 10),  # Thursday, before the window
+        }
+        monkeypatch.setattr(
+            fetcher, '_fetch_abs_metadata', lambda aid, timeout=10.0: ('', '', '', dates[aid])
+        )
+
+        papers = fetcher._fetch_via_rss(_et(2026, 5, 22, 14), _et(2026, 5, 25, 14))
+
+        assert [p['title'] for p in papers] == ['In window']
+        assert all('_submitted_dt' not in p for p in papers)
+
+    def test_stale_feed_yields_empty(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self._patch_feed(monkeypatch, [self._entry('2605.99002', 'Too old')])
+        monkeypatch.setattr(
+            fetcher,
+            '_fetch_abs_metadata',
+            lambda aid, timeout=10.0: ('', '', '', _et(2026, 5, 21, 10)),
+        )
+
+        papers = fetcher._fetch_via_rss(_et(2026, 5, 22, 14), _et(2026, 5, 25, 14))
+
+        assert papers == []
+
+    def test_keeps_paper_when_date_unknown(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # Fail open: an un-scrapeable abs page must not silently drop a paper.
+        self._patch_feed(monkeypatch, [self._entry('2605.99003', 'Unknown date')])
+        monkeypatch.setattr(
+            fetcher, '_fetch_abs_metadata', lambda aid, timeout=10.0: ('', '', '', None)
+        )
+
+        papers = fetcher._fetch_via_rss(_et(2026, 5, 22, 14), _et(2026, 5, 25, 14))
+
+        assert [p['title'] for p in papers] == ['Unknown date']

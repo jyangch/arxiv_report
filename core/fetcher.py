@@ -47,16 +47,34 @@ _ABS_JREF_RE = re.compile(r'<td class="tablecell jref">([^<]+)</td>', re.IGNOREC
 _ABS_DOI_RE = re.compile(
     r'<td class="tablecell doi">.*?data-doi="([^"]+)"', re.IGNORECASE | re.DOTALL
 )
+# Original-submission (v1) timestamp from the abs-page submission history, e.g.
+# "[v1] Thu, 21 May 2026 18:00:32 UTC". arXiv always renders these in UTC.
+_ABS_SUBMITTED_RE = re.compile(
+    r'\[v1\].*?(\w{3}, \d{1,2} \w{3} \d{4} \d{2}:\d{2}:\d{2})\s+UTC', re.DOTALL
+)
 
 
 def get_arxiv_sync_window(
     as_of: datetime.datetime | None = None,
 ) -> tuple[datetime.datetime, datetime.datetime]:
-    """Compute the (start, end) ET window matching arXiv's daily release cadence.
+    """Compute the (start, end) ET submission window of the listing dated ``as_of``.
 
-    arXiv announces submissions at 14:00 ET each weekday. The window ends at
-    14:00 ET on the day before ``as_of`` and starts 1 (or 3 on Mondays) days
-    earlier to cover the weekend gap. On weekends ``start == end``.
+    arXiv announces Sunday-Thursday at 20:00 ET; the submission deadline is
+    14:00 ET. Each calendar listing covers a fixed submission window:
+
+    ====== =================================== ====================
+    Listing Submission window (ET)             Announced
+    ====== =================================== ====================
+    Mon     Thu 14:00 -> Fri 14:00             Sun 20:00
+    Tue     Fri 14:00 -> Mon 14:00 (weekend)   Mon 20:00
+    Wed     Mon 14:00 -> Tue 14:00             Tue 20:00
+    Thu     Tue 14:00 -> Wed 14:00             Wed 20:00
+    Fri     Wed 14:00 -> Thu 14:00             Thu 20:00
+    ====== =================================== ====================
+
+    The three-day weekend bundle is announced on (and dated) **Tuesday**, so
+    the reach-back belongs on Tuesday, not Monday. On Sat/Sun there is no
+    listing and ``start == end``.
 
     Args:
         as_of: Reference timestamp; defaults to ``now`` in the Eastern timezone.
@@ -66,15 +84,21 @@ def get_arxiv_sync_window(
     """
     now_et = as_of.astimezone(ARXIV_TZ) if as_of else datetime.datetime.now(ARXIV_TZ)
     weekday = now_et.weekday()
-    if weekday == 0:
-        days_back = 3
-    elif weekday in (5, 6):
-        days_back = 0
-    else:
-        days_back = 1
+    # (end_offset, length): end is ``end_offset`` days before ``as_of`` at
+    # 14:00 ET; start is ``length`` days before end.
+    if weekday == 0:  # Monday: Sunday-announced listing = Thu -> Fri
+        end_offset, length = 3, 1
+    elif weekday == 1:  # Tuesday: Monday-announced weekend bundle = Fri -> Mon
+        end_offset, length = 1, 3
+    elif weekday in (5, 6):  # weekend: no listing
+        end_offset, length = 1, 0
+    else:  # Wed/Thu/Fri: prior day's 14:00 -> 14:00
+        end_offset, length = 1, 1
 
-    end_time = now_et.replace(hour=14, minute=0, second=0, microsecond=0) - timedelta(days=1)
-    start_time = end_time - timedelta(days=days_back)
+    end_time = now_et.replace(hour=14, minute=0, second=0, microsecond=0) - timedelta(
+        days=end_offset
+    )
+    start_time = end_time - timedelta(days=length)
     return start_time, end_time
 
 
@@ -161,11 +185,30 @@ def _extract_arxiv_id(url: str) -> str | None:
     return m.group(1) if m else None
 
 
-def _fetch_abs_metadata(arxiv_id: str, timeout: float = 10.0) -> tuple[str, str, str]:
-    """Scrape (comment, journal_ref, doi) from arxiv.org/abs/<id>.
+def _parse_abs_submitted(html: str) -> datetime.datetime | None:
+    """Return the v1 (original) submission time from abs-page HTML, or None.
 
-    Used to backfill fields missing in the RSS fallback. arxiv.org/abs is on
-    different infrastructure than export.arxiv.org/api and rarely 429s.
+    arXiv renders submission-history timestamps in UTC; the returned datetime
+    is timezone-aware UTC. ``None`` means the timestamp could not be located.
+    """
+    m = _ABS_SUBMITTED_RE.search(html)
+    if not m:
+        return None
+    try:
+        naive = datetime.datetime.strptime(m.group(1), '%a, %d %b %Y %H:%M:%S')
+    except ValueError:
+        return None
+    return pytz.UTC.localize(naive)
+
+
+def _fetch_abs_metadata(
+    arxiv_id: str, timeout: float = 10.0
+) -> tuple[str, str, str, datetime.datetime | None]:
+    """Scrape (comment, journal_ref, doi, v1_submitted) from arxiv.org/abs/<id>.
+
+    Used to backfill fields missing in the RSS fallback and to recover each
+    paper's submission time (RSS exposes only the announcement date). The
+    arxiv.org/abs host is separate from export.arxiv.org/api and rarely 429s.
     """
     url = f'https://arxiv.org/abs/{arxiv_id}'
     req = urllib.request.Request(url, headers={'User-Agent': 'arxiv-report/1.0'})
@@ -176,7 +219,12 @@ def _fetch_abs_metadata(arxiv_id: str, timeout: float = 10.0) -> tuple[str, str,
         m = regex.search(html)
         return _html_unescape(m.group(1)).strip() if m else ''
 
-    return first(_ABS_COMMENTS_RE), first(_ABS_JREF_RE), first(_ABS_DOI_RE)
+    return (
+        first(_ABS_COMMENTS_RE),
+        first(_ABS_JREF_RE),
+        first(_ABS_DOI_RE),
+        _parse_abs_submitted(html),
+    )
 
 
 def _enrich_papers(papers: list[dict], max_workers: int = 5) -> None:
@@ -190,13 +238,14 @@ def _enrich_papers(papers: list[dict], max_workers: int = 5) -> None:
         if not arxiv_id:
             return
         try:
-            c, j, d = _fetch_abs_metadata(arxiv_id)
+            c, j, d, submitted = _fetch_abs_metadata(arxiv_id)
         except Exception as e:
             print(f'  ⚠️  abs-page fetch failed for {arxiv_id}: {e}')
             return
         paper['comment'] = c
         paper['journal_ref'] = j
         paper['doi'] = d
+        paper['_submitted_dt'] = submitted
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as ex:
         list(ex.map(enrich_one, papers))
@@ -259,16 +308,22 @@ def _fetch_via_api(start_t: datetime.datetime, end_t: datetime.datetime) -> list
     return papers
 
 
-def _fetch_via_rss() -> list[dict]:
-    """Fetch papers from arXiv's astro-ph.HE RSS feed (latest announcement only).
+def _fetch_via_rss(
+    start_t: datetime.datetime, end_t: datetime.datetime
+) -> list[dict]:
+    """Fetch astro-ph.HE RSS papers and filter to the ``[start_t, end_t)`` window.
 
-    The RSS endpoint is far less rate-limited than the query API but only
-    exposes the most recent announcement, so this is suitable as a fallback
-    when the caller wants ``as_of == today`` and the API is 429-ing.
+    The RSS endpoint is far less rate-limited than the query API but exposes
+    only the most recent announcement, so it is a fallback for ``as_of ==
+    today`` when the API is 429-ing.
 
-    Only ``announce_type == 'new'`` items are returned — replacements and
-    cross-listings are excluded to mirror the api path's ``submittedDate``
-    semantics.
+    Only ``announce_type == 'new'`` items are kept (replacements and
+    cross-listings excluded). Each kept item's v1 submission time is recovered
+    from its abs page and compared against the window: a feed that has not yet
+    refreshed to the requested listing filters to ``[]`` rather than returning
+    the previous announcement's papers. Items whose submission time cannot be
+    scraped are kept (fail-open) so a parsing hiccup never silently drops a
+    paper.
     """
     print(f'⚠️  Falling back to RSS feed: {ARXIV_RSS_URL}')
     feed = feedparser.parse(ARXIV_RSS_URL)
@@ -315,7 +370,26 @@ def _fetch_via_rss() -> list[dict]:
     if papers:
         print(f'🌐 Enriching {len(papers)} papers from abs pages…')
         _enrich_papers(papers)
+        papers = _filter_to_window(papers, start_t, end_t)
+        print(f'🪟 {len(papers)} of the announcement fall within the sync window.')
     return papers
+
+
+def _filter_to_window(
+    papers: list[dict], start_t: datetime.datetime, end_t: datetime.datetime
+) -> list[dict]:
+    """Keep papers whose v1 submission time lies in ``[start_t, end_t)``.
+
+    Consumes the transient ``_submitted_dt`` stashed by enrichment (so the
+    returned dicts stay JSON-serialisable for the cache). A paper with no
+    recovered timestamp is kept (fail-open).
+    """
+    kept = []
+    for paper in papers:
+        submitted = paper.pop('_submitted_dt', None)
+        if submitted is None or start_t <= submitted < end_t:
+            kept.append(paper)
+    return kept
 
 
 def fetch_arxiv_papers(as_of: datetime.datetime | None = None) -> list[dict]:
@@ -351,7 +425,7 @@ def fetch_arxiv_papers(as_of: datetime.datetime | None = None) -> list[dict]:
 
     if window_is_recent and _is_in_cooldown():
         print('⏭️  Skipping api (recent 429 cooldown active); going straight to RSS.')
-        papers = _fetch_via_rss()
+        papers = _fetch_via_rss(start_t, end_t)
     elif _is_in_cooldown() and not window_is_recent:
         # Historical windows have no RSS fallback, but we still respect the
         # cooldown so repeat clicks don't hammer arXiv while it's throttling us.
@@ -371,7 +445,7 @@ def fetch_arxiv_papers(as_of: datetime.datetime | None = None) -> list[dict]:
             if not window_is_recent:
                 # No RSS fallback available for historical windows -- propagate.
                 raise
-            papers = _fetch_via_rss()
+            papers = _fetch_via_rss(start_t, end_t)
 
     papers.sort(key=lambda p: _extract_arxiv_id(p.get('url', '')) or '', reverse=True)
     # Never cache an empty result: a degraded RSS fallback during a 429 can
