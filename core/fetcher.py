@@ -8,7 +8,7 @@ import json
 import os
 import re
 import time
-from urllib.error import HTTPError as _UrllibHTTPError
+from urllib.error import HTTPError as _UrllibHTTPError, URLError as _UrllibURLError
 import urllib.request
 
 import arxiv
@@ -202,18 +202,34 @@ def _parse_abs_submitted(html: str) -> datetime.datetime | None:
 
 
 def _fetch_abs_metadata(
-    arxiv_id: str, timeout: float = 10.0
+    arxiv_id: str, timeout: float = 20.0, max_retries: int = 2
 ) -> tuple[str, str, str, datetime.datetime | None]:
     """Scrape (comment, journal_ref, doi, v1_submitted) from arxiv.org/abs/<id>.
 
     Used to backfill fields missing in the RSS fallback and to recover each
     paper's submission time (RSS exposes only the announcement date). The
     arxiv.org/abs host is separate from export.arxiv.org/api and rarely 429s.
+
+    Retries on transient failures (read timeout, connection error, 5xx) up to
+    ``max_retries`` times with a 1-second backoff; 4xx HTTP responses are
+    raised immediately because they do not improve on retry.
     """
     url = f'https://arxiv.org/abs/{arxiv_id}'
     req = urllib.request.Request(url, headers={'User-Agent': 'arxiv-report/1.0'})
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        html = resp.read().decode('utf-8', errors='replace')
+
+    html = ''
+    for attempt in range(max_retries + 1):
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                html = resp.read().decode('utf-8', errors='replace')
+            break
+        except _UrllibHTTPError as e:
+            if 400 <= getattr(e, 'code', 0) < 500 or attempt >= max_retries:
+                raise
+        except (TimeoutError, _UrllibURLError, OSError):
+            if attempt >= max_retries:
+                raise
+        time.sleep(1)
 
     def first(regex: re.Pattern) -> str:
         m = regex.search(html)
@@ -372,6 +388,20 @@ def _fetch_via_rss(
         _enrich_papers(papers)
         papers = _filter_to_window(papers, start_t, end_t)
         print(f'🪟 {len(papers)} of the announcement fall within the sync window.')
+
+    if papers and not any(p.get('_submitted_dt') is not None for p in papers):
+        # Every kept paper passed the filter via fail-open (abs-page enrichment
+        # failed for all of them), so we cannot trust that any of them actually
+        # fall in the window. Treat as empty so the caller skips caching and
+        # the report file, letting the next scheduled retry re-fetch.
+        print(
+            '⚠️  All RSS papers came through fail-open (abs-page enrichment '
+            'failed for every one); discarding result so the next retry can re-fetch.'
+        )
+        return []
+
+    for paper in papers:
+        paper.pop('_submitted_dt', None)
     return papers
 
 
@@ -380,13 +410,14 @@ def _filter_to_window(
 ) -> list[dict]:
     """Keep papers whose v1 submission time lies in ``[start_t, end_t)``.
 
-    Consumes the transient ``_submitted_dt`` stashed by enrichment (so the
-    returned dicts stay JSON-serialisable for the cache). A paper with no
-    recovered timestamp is kept (fail-open).
+    Inspects the transient ``_submitted_dt`` stashed by enrichment but leaves
+    it on the kept dicts so the caller can distinguish papers with a real
+    timestamp from fail-open passes (where enrichment failed). A paper with
+    no recovered timestamp is kept (fail-open).
     """
     kept = []
     for paper in papers:
-        submitted = paper.pop('_submitted_dt', None)
+        submitted = paper.get('_submitted_dt')
         if submitted is None or start_t <= submitted < end_t:
             kept.append(paper)
     return kept
