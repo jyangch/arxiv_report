@@ -139,7 +139,10 @@ def describe_empty_window(as_of: datetime.datetime | None = None) -> str:
     now_et = as_of.astimezone(ARXIV_TZ) if as_of else datetime.datetime.now(ARXIV_TZ)
     day = now_et.date()
     if day.weekday() >= 5:
-        return f'{day:%A} {day:%Y-%m-%d} is a weekend; arXiv does not announce on weekends.'
+        return (
+            f'{day:%A} {day:%Y-%m-%d} has no arXiv listing -- arXiv announces '
+            'Sun-Thu 20:00 ET, so listings are dated Mon-Fri and never Sat/Sun.'
+        )
     holiday = _arxiv_holiday_name(day)
     if holiday:
         return f'{day:%Y-%m-%d} is {holiday}; arXiv defers announcements on this holiday.'
