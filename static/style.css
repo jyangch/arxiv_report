@@ -61,8 +61,8 @@ body {
   height: 46px;
   flex-shrink: 0;
 }
-.brand-icon .logo-mark { fill: #b31b1b; }   /* arXiv red */
-.brand-icon .logo-glass { stroke: #334155; }
+.brand-icon .logo-mark { fill: #b31b1b; }      /* arXiv red */
+.brand-icon .logo-sparkle { fill: #f59e0b; }   /* amber "today's picks" accent */
 .sidebar-brand .brand-text {
   display: flex;
   flex-direction: column;
@@ -374,8 +374,8 @@ label[for="date-input"] {
     --danger-soft: rgba(248, 113, 113, 0.12);
   }
   /* Patch the few spots that hardcode light colors. */
-  .brand-icon .logo-mark { fill: #e0405f; }   /* lighter red reads better on near-black */
-  .brand-icon .logo-glass { stroke: #94a3b8; }
+  .brand-icon .logo-mark { fill: #e0405f; }      /* lighter red reads better on near-black */
+  .brand-icon .logo-sparkle { fill: #fbbf24; }   /* brighter amber on dark */
   .sidebar-header .kicker { color: var(--text-muted); }
   #date-input { background: var(--surface); }
   #date-input:hover { border-color: var(--border-strong); }
