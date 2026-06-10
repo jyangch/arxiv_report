@@ -20,38 +20,6 @@
   --sidebar-w: 280px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    /* Render native controls (date input, calendar picker, scrollbars) dark. */
-    color-scheme: dark;
-    --bg: #0f1117;
-    --bg-deep: #0b0d12;
-    --surface: #161922;
-    --surface-soft: rgba(22, 25, 34, 0.85);
-    --border: #262b36;
-    --border-strong: #333a48;
-    --text: #d4d8e0;
-    --text-bright: #f1f3f7;
-    --text-muted: #9aa3b2;
-    --text-dim: #6b7384;
-    --accent: #818cf8;
-    --accent-soft: rgba(129, 140, 248, 0.14);
-    --accent-strong: rgba(129, 140, 248, 0.30);
-    --danger: #f87171;
-    --danger-soft: rgba(248, 113, 113, 0.12);
-  }
-  /* Patch the few spots that hardcode light colors. */
-  .brand-icon .logo-mark { fill: #e0405f; }   /* lighter red reads better on near-black */
-  .brand-icon .logo-glass { stroke: #94a3b8; }
-  .sidebar-header .kicker { color: var(--text-muted); }
-  #date-input { background: var(--surface); }
-  #date-input:hover { border-color: var(--border-strong); }
-  .recent-list a:hover { background: rgba(255, 255, 255, 0.05); }
-  .alert { background: var(--surface); }
-  *::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.12); }
-  *::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.22); }
-}
-
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; height: 100%; }
 body {
@@ -381,3 +349,38 @@ label[for="date-input"] {
   border-radius: 4px;
 }
 *::-webkit-scrollbar-thumb:hover { background: rgba(0, 0, 0, 0.18); }
+
+/* === Dark mode === */
+/* Placed last so these overrides win over the light rules above at equal
+   specificity (media queries add no specificity; later source order wins). */
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Render native controls (date input, calendar picker, scrollbars) dark. */
+    color-scheme: dark;
+    --bg: #0f1117;
+    --bg-deep: #0b0d12;
+    --surface: #161922;
+    --surface-soft: rgba(22, 25, 34, 0.85);
+    --border: #262b36;
+    --border-strong: #333a48;
+    --text: #d4d8e0;
+    --text-bright: #f1f3f7;
+    --text-muted: #9aa3b2;
+    --text-dim: #6b7384;
+    --accent: #818cf8;
+    --accent-soft: rgba(129, 140, 248, 0.14);
+    --accent-strong: rgba(129, 140, 248, 0.30);
+    --danger: #f87171;
+    --danger-soft: rgba(248, 113, 113, 0.12);
+  }
+  /* Patch the few spots that hardcode light colors. */
+  .brand-icon .logo-mark { fill: #e0405f; }   /* lighter red reads better on near-black */
+  .brand-icon .logo-glass { stroke: #94a3b8; }
+  .sidebar-header .kicker { color: var(--text-muted); }
+  #date-input { background: var(--surface); }
+  #date-input:hover { border-color: var(--border-strong); }
+  .recent-list a:hover { background: rgba(255, 255, 255, 0.05); }
+  .alert { background: var(--surface); }
+  *::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.12); }
+  *::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.22); }
+}
