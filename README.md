@@ -11,6 +11,7 @@ Automatically fetches the latest papers from the arXiv `astro-ph.HE` (High Energ
 - Multi-provider LLM dispatch: Claude (CLI or API), Gemini, OpenAI -- auto-fallback on quota errors
 - Self-contained styled HTML reports (light / dark adaptive, internal anchor scrolling)
 - FastAPI + HTMX web UI: per-date URLs, sidebar history, live SSE progress
+- Per-paper "Save to Craft" button: hands off a new Craft document (title, authors, method/results/caveats, optional personal note) via the `craftdocs://` URL scheme
 
 ## Project layout
 
@@ -52,6 +53,8 @@ Set API keys, models, and the Claude backend via environment variables (all opti
 | `GEMINI_MODEL` | Gemini model name | `gemini-3.1-flash-lite-preview` |
 | `OPENAI_API_KEY` | OpenAI API key | — |
 | `OPENAI_MODEL` | OpenAI model name | `gpt-5.4` |
+| `CRAFT_SPACE_ID` | Craft space ID for the "Save to Craft" button target folder | maintainer's own space |
+| `CRAFT_ARXIV_FOLDER_ID` | Craft folder ID new saved documents are created in | maintainer's own "arxiv Notes" folder |
 
 The CLI backend always uses the `opus` model alias (hardcoded in `core/providers.py`). The preferred LLM provider can be set via `PREFERRED_PROVIDER` in `core/config.py` (`"claude"`, `"gemini"`, or `"openai"`). Defaults to `"claude"`.
 
@@ -104,6 +107,7 @@ The HTML report contains two sections:
 
 - arXiv does not publish new submissions on weekends; running on Saturday or Sunday will return no results
 - On Mondays, the script automatically retrieves papers from the preceding Friday to account for the weekend gap
+- The "Save to Craft" button is client-side only and requires the Craft desktop app on macOS; it opens a native "open Craft?" confirmation the first time each browser session
 
 ## License
 
