@@ -385,13 +385,13 @@ function saveToCraft(item) {{
     if (note) content += '\\n\\n---\\n**个人备注：** ' + note;
 
     const title = '[' + arxivId + '] ' + titleZh;
-    const params = new URLSearchParams({{
-        spaceId: CRAFT_SPACE_ID,
-        folderId: CRAFT_FOLDER_ID,
-        title: title,
-        content: content
-    }});
-    window.location.href = 'craftdocs://x-callback-url/createdocument?' + params.toString();
+    const query = [
+        'spaceId=' + encodeURIComponent(CRAFT_SPACE_ID),
+        'folderId=' + encodeURIComponent(CRAFT_FOLDER_ID),
+        'title=' + encodeURIComponent(title),
+        'content=' + encodeURIComponent(content)
+    ].join('&');
+    window.location.href = 'craftdocs://x-callback-url/createdocument?' + query;
 }}
 
 document.querySelectorAll('.paper-item').forEach(function(item) {{
