@@ -3,6 +3,8 @@
 import datetime
 import os
 
+from core.config import CRAFT_ARXIV_FOLDER_ID, CRAFT_SPACE_ID
+
 REPORTS_DIR = './reports'
 
 
@@ -237,6 +239,24 @@ code, .entry-id {{
     box-shadow: 0 0 0 3px var(--primary-soft);
 }}
 .paper-item p {{ margin: 6px 0; }}
+.craft-save-btn {{
+    float: right;
+    font-size: 0.72em;
+    font-weight: 600;
+    padding: 3px 10px;
+    margin-left: 8px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--surface-alt);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+}}
+.craft-save-btn:hover {{
+    background: var(--primary-soft);
+    color: var(--primary);
+    border-color: var(--primary);
+}}
 h3 {{
     color: var(--primary);
     margin: 0 0 12px;
@@ -323,6 +343,70 @@ document.addEventListener('click', function(e) {{
     document.querySelectorAll('.is-target').forEach(el => el.classList.remove('is-target'));
     target.classList.add('is-target');
     target.scrollIntoView({{behavior: 'auto', block: 'center'}});
+}});
+</script>
+<script>
+const CRAFT_SPACE_ID = '{CRAFT_SPACE_ID}';
+const CRAFT_FOLDER_ID = '{CRAFT_ARXIV_FOLDER_ID}';
+
+function craftField(item, label) {{
+    const paras = item.querySelectorAll('p');
+    for (const p of paras) {{
+        const strong = p.querySelector('strong');
+        if (strong && strong.textContent.trim() === label) {{
+            return p.textContent.slice(strong.textContent.length).trim();
+        }}
+    }}
+    return '';
+}}
+
+function saveToCraft(item) {{
+    const link = item.querySelector('h3 a');
+    const url = link ? link.href : '';
+    const arxivId = link ? link.textContent.trim() : '';
+    const titleEn = craftField(item, '英文标题：');
+    const titleZh = craftField(item, '中文标题：');
+    const authors = craftField(item, '作者：');
+    const question = craftField(item, '研究问题：');
+    const method = craftField(item, '研究方法：');
+    const result = craftField(item, '研究结果：');
+    const caveat = craftField(item, '潜在不足与延伸方向：');
+
+    const note = prompt('个人备注（可选）：');
+    if (note === null) return;
+
+    let content = '# ' + titleZh + '\\n' + titleEn + '\\n\\n';
+    content += '[arXiv:' + arxivId + '](' + url + ')\\n\\n';
+    content += '**作者：** ' + authors + '\\n';
+    if (question) content += '\\n**研究问题：** ' + question;
+    content += '\\n**研究方法：** ' + method;
+    content += '\\n**研究结果：** ' + result;
+    if (caveat) content += '\\n**潜在不足与延伸方向：** ' + caveat;
+    if (note) content += '\\n\\n---\\n**个人备注：** ' + note;
+
+    const title = '[' + arxivId + '] ' + titleZh;
+    const params = new URLSearchParams({{
+        spaceId: CRAFT_SPACE_ID,
+        folderId: CRAFT_FOLDER_ID,
+        title: title,
+        content: content
+    }});
+    window.location.href = 'craftdocs://x-callback-url/createdocument?' + params.toString();
+}}
+
+document.querySelectorAll('.paper-item').forEach(function(item) {{
+    const h3 = item.querySelector('h3');
+    if (!h3) return;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'craft-save-btn';
+    btn.textContent = '📥 收藏到 Craft';
+    btn.addEventListener('click', function() {{
+        saveToCraft(item);
+        btn.textContent = '已收藏 ✓';
+        setTimeout(function() {{ btn.textContent = '📥 收藏到 Craft'; }}, 3000);
+    }});
+    h3.appendChild(btn);
 }});
 </script>
 </body>
