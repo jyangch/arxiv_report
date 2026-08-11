@@ -15,6 +15,7 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Stre
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from core.config import FALLBACK_ORDER, OPENAI_BACKEND, PREFERRED_PROVIDER
 from core.fetcher import (
     ARXIV_COOLDOWN_PATH,
     ARXIV_COOLDOWN_SECONDS,
@@ -23,7 +24,7 @@ from core.fetcher import (
     fetch_arxiv_papers,
 )
 from core.providers import generate_report
-from core.render import REPORTS_DIR, save_html
+from core.render import REPORTS_DIR, STARRED_REPORT, save_html
 
 _DATE_RE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
 _REPORT_FILENAME_RE = re.compile(r'arXiv_astro_ph_HE_daily_report_(\d{4}-\d{2}-\d{2})\.html$')
@@ -66,6 +67,27 @@ def _list_recent_dates(limit: int = 30) -> list[datetime.date]:
 def _report_path(date: datetime.date) -> str:
     """Filesystem path for the report HTML on this date."""
     return os.path.join(REPORTS_DIR, f'arXiv_astro_ph_HE_daily_report_{date.isoformat()}.html')
+
+
+def _file_version(path: str) -> str:
+    """Cache-busting token for generated HTML iframe URLs."""
+    try:
+        return str(int(os.path.getmtime(path) * 1000))
+    except OSError:
+        return str(int(time.time() * 1000))
+
+
+def _raw_html_response(path: str) -> FileResponse:
+    """Serve generated HTML without browser caching stale iframe content."""
+    return FileResponse(
+        path,
+        media_type='text/html',
+        headers={
+            'Cache-Control': 'no-store, max-age=0',
+            'Pragma': 'no-cache',
+            'Expires': '0',
+        },
+    )
 
 
 def _arxiv_cooldown_remaining() -> int:
@@ -115,6 +137,13 @@ def _worker(task_id: str, as_of: datetime.datetime, date_str: str) -> None:
     any stage land in ``task['error']`` and set ``status='error'``.
     """
     task = _tasks[task_id]
+    task['messages'].append(f'Task: {task_id[:8]} · Date: {date_str}')
+    task['messages'].append(
+        'Provider preference: '
+        f'{PREFERRED_PROVIDER}; fallback: {", ".join(FALLBACK_ORDER) or "none"}; '
+        f'OpenAI backend: {OPENAI_BACKEND}'
+    )
+    task['messages'].append(f'Fetch anchor: {as_of.isoformat()}')
     task['messages'].append('Fetching arXiv papers...')
     try:
         papers = fetch_arxiv_papers(as_of=as_of)
@@ -145,6 +174,7 @@ def _worker(task_id: str, as_of: datetime.datetime, date_str: str) -> None:
     task['provider'] = provider
     task['messages'].append(f'Provider: {provider}')
     task['report_path'] = save_html(papers, report, provider, as_of=as_of)
+    task['messages'].append(f'Output: {task["report_path"]}')
     task['status'] = 'done'
     task['messages'].append('Done.')
 
@@ -164,6 +194,11 @@ def _render_home(
             'selected_date': selected_date,
             'main_content': main_content,
             'controls_html': _render_controls(selected_date),
+        },
+        headers={
+            'Cache-Control': 'no-store, max-age=0',
+            'Pragma': 'no-cache',
+            'Expires': '0',
         },
     )
 
@@ -194,7 +229,11 @@ def _terminal_fragment(task: dict) -> str:
             date=task['date'],
             reason=task.get('empty_reason'),
         )
-    return _render_partial('partials/report_frame.html', date=task['date'])
+    return _render_partial(
+        'partials/report_frame.html',
+        date=task['date'],
+        raw_version=_file_version(task['report_path']),
+    )
 
 
 def _sse_pack_fragment(event: str, html: str) -> str:
@@ -229,7 +268,11 @@ def report_page(date: str, request: Request) -> HTMLResponse:
         raise HTTPException(status_code=400, detail='Invalid date')
     path = _report_path(parsed)
     if os.path.exists(path):
-        main = _render_partial('partials/report_frame.html', date=parsed.isoformat())
+        main = _render_partial(
+            'partials/report_frame.html',
+            date=parsed.isoformat(),
+            raw_version=_file_version(path),
+        )
     else:
         main = _render_partial('partials/placeholder.html', date=parsed.isoformat())
     return _render_home(request, parsed, main)
@@ -244,7 +287,26 @@ def report_raw(date: str) -> FileResponse:
     path = _report_path(parsed)
     if not os.path.exists(path):
         raise HTTPException(status_code=404, detail='Report not found')
-    return FileResponse(path, media_type='text/html')
+    return _raw_html_response(path)
+
+
+@app.get('/starred', response_class=HTMLResponse)
+def starred_page(request: Request) -> HTMLResponse:
+    """Main page for the browser-local starred/Craft collection."""
+    path = os.path.join(REPORTS_DIR, STARRED_REPORT)
+    main = _render_partial('partials/starred_frame.html', raw_version=_file_version(path))
+    return _render_home(request, None, main)
+
+
+@app.get('/starred/raw')
+def starred_raw() -> FileResponse:
+    """Serve the standalone browser-local starred/Craft collection."""
+    path = os.path.join(REPORTS_DIR, STARRED_REPORT)
+    if not os.path.exists(path):
+        from core.render import _write_starred_html
+
+        _write_starred_html(provider='local')
+    return _raw_html_response(path)
 
 
 @app.post('/generate', response_class=HTMLResponse)

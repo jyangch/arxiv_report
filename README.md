@@ -8,7 +8,7 @@ Automatically fetches the latest papers from the arXiv `astro-ph.HE` (High Energ
 - Supports arbitrary historical dates via arXiv's `submittedDate` range query
 - Classifies papers by research topic (GRBs, black holes, supernovae, cosmic rays, ...)
 - Generates Chinese-language summaries with method tags and key physical findings
-- Multi-provider LLM dispatch: Claude (CLI or API), Gemini, OpenAI -- auto-fallback on quota errors
+- Multi-provider LLM dispatch: OpenAI Codex CLI / API by default, with optional Claude (CLI or API) and Gemini fallback
 - Self-contained styled HTML reports (light / dark adaptive, internal anchor scrolling)
 - FastAPI + HTMX web UI: per-date URLs, sidebar history, live SSE progress
 - Per-paper "Save to Craft" button: hands off a new Craft document (title, authors, method/results/caveats, optional personal note) via the `craftdocs://` URL scheme
@@ -38,40 +38,51 @@ Automatically fetches the latest papers from the arXiv `astro-ph.HE` (High Energ
 pip install -r requirements.txt
 ```
 
-For the default Claude CLI backend, also install [Claude Code](https://claude.com/claude-code) and log in once with `claude /login` (choose the Anthropic Console / Pro / Max path).
+For the default ChatGPT/Codex backend, install the Codex CLI and log in once with `codex login`.
 
 ## Configuration
 
-Set API keys, models, and the Claude backend via environment variables (all optional, defaults provided):
+Set API keys, models, and provider backends via environment variables (all optional, defaults provided):
 
 | Variable | Description | Default |
 |---|---|---|
+| `PREFERRED_PROVIDER` | Preferred LLM provider: `openai`, `claude`, or `gemini` | `openai` |
+| `FALLBACK_ORDER` | Comma-separated fallback order | `openai` |
+| `OPENAI_BACKEND` | `codex` (consumes ChatGPT/Codex subscription via Codex CLI) or `api` (consumes API credits) | `codex` |
+| `OPENAI_API_KEY` | OpenAI API key -- only needed when `OPENAI_BACKEND=api` | — |
+| `OPENAI_MODEL` | OpenAI/Codex model name | `gpt-5.4` |
+| `CODEX_CLI` | Optional absolute path to the Codex CLI, useful for launchd services with a minimal `PATH` | auto-detected |
 | `CLAUDE_BACKEND` | `cli` (consumes Max quota via Claude Code) or `api` (consumes API credits) | `cli` |
 | `CLAUDE_API_KEY` | Anthropic Claude API key -- only needed when `CLAUDE_BACKEND=api` | — |
 | `CLAUDE_MODEL` | Claude model name (API backend only) | `claude-opus-4-6` |
 | `GEMINI_API_KEY` | Google Gemini API key | — |
 | `GEMINI_MODEL` | Gemini model name | `gemini-3.1-flash-lite-preview` |
-| `OPENAI_API_KEY` | OpenAI API key | — |
-| `OPENAI_MODEL` | OpenAI model name | `gpt-5.4` |
 | `CRAFT_SPACE_ID` | Craft space ID for the "Save to Craft" button target folder | maintainer's own space |
 | `CRAFT_ARXIV_FOLDER_ID` | Craft folder ID new saved documents are created in | maintainer's own "arxiv Notes" folder |
 
-The CLI backend always uses the `opus` model alias (hardcoded in `core/providers.py`). The preferred LLM provider can be set via `PREFERRED_PROVIDER` in `core/config.py` (`"claude"`, `"gemini"`, or `"openai"`). Defaults to `"claude"`.
+The Claude CLI backend always uses the `opus` model alias (hardcoded in `core/providers.py`). The preferred LLM provider can be set with `PREFERRED_PROVIDER` (`"openai"`, `"claude"`, or `"gemini"`). Defaults to `"openai"`.
+
+By default, no Claude fallback is attempted, so a normal run only consumes the logged-in ChatGPT/Codex account. To re-enable multi-provider fallback, set for example `FALLBACK_ORDER=openai,claude,gemini`.
 
 ## Usage
 
 ### CLI
 
 ```bash
-# Default: today's report via Claude Code CLI (Max subscription)
+# Default: today's report via Codex CLI (ChatGPT/Codex subscription)
 python report.py
 
 # Generate a report for any historical date (uses arXiv's submittedDate range query)
 python report.py --date 2026-03-15
 
-# Switch to the API SDK:
+# Switch Claude to the API SDK:
 export CLAUDE_BACKEND=api
 export CLAUDE_API_KEY="your_api_key_here"
+python report.py
+
+# Switch OpenAI to the API SDK:
+export OPENAI_BACKEND=api
+export OPENAI_API_KEY="your_api_key_here"
 python report.py
 ```
 

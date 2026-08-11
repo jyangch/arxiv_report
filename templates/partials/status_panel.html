@@ -1,5 +1,17 @@
 <div id="status-panel">
-  <h3>Running...</h3>
+  <div class="status-header">
+    <div>
+      <p class="status-kicker">Generation</p>
+      <h3>Running report build</h3>
+    </div>
+    <span class="task-chip">Task {{ task_id[:8] }}</span>
+  </div>
+  <div class="diagnostic-strip">
+    <span>Fetch</span>
+    <span>LLM</span>
+    <span>Render</span>
+    <span>Save</span>
+  </div>
   <div id="run-log" class="run-log" aria-live="polite"></div>
   <div class="run-status-row">
     <span class="spinner" aria-hidden="true"></span>

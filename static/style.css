@@ -36,9 +36,9 @@ body {
 /* === Sidebar === */
 #sidebar {
   position: relative;
-  background: var(--surface);
+  background: linear-gradient(180deg, #ffffff 0%, #fbfcff 100%);
   border-right: 1px solid var(--border);
-  box-shadow: 1px 0 0 rgba(15, 23, 42, 0.02);
+  box-shadow: 1px 0 0 rgba(15, 23, 42, 0.02), 8px 0 24px rgba(79, 70, 229, 0.035);
   padding: 28px 22px;
   display: flex;
   flex-direction: column;
@@ -61,28 +61,31 @@ body {
   height: 46px;
   flex-shrink: 0;
 }
-.brand-icon .logo-mark { fill: #b31b1b; }      /* arXiv red */
-.brand-icon .logo-sparkle { fill: #f59e0b; }   /* amber "today's picks" accent */
+.brand-icon .logo-mark { fill: #3f4fe0; }      /* brand blue-violet */
+.brand-icon .logo-sparkle { fill: #f59e0b; }   /* bright gold accent */
 .sidebar-brand .brand-text {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  line-height: 1.1;
+  gap: 3px;
+  line-height: 1;
 }
 .sidebar-header .kicker {
   margin: 0;
-  font-size: 0.66rem;
-  font-weight: 700;
-  letter-spacing: 0.18em;
+  font-family: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 0.64rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: #475569;
+  color: #415166;
 }
 .sidebar-header .title {
   margin: 0;
-  font-size: 1.5rem;
+  font-family: 'Manrope', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 1.58rem;
   font-weight: 800;
-  letter-spacing: -0.02em;
-  background: var(--accent-grad);
+  letter-spacing: -0.035em;
+  line-height: 0.96;
+  background: linear-gradient(120deg, #4f46e5 0%, #0ea5e9 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -140,12 +143,12 @@ label[for="date-input"] {
   justify-content: center;
   gap: 6px;
   padding: 10px 14px;
-  border: 1px solid rgba(79, 70, 229, 0.30);
+  border: 1px solid rgba(79, 70, 229, 0.26);
   border-radius: 8px;
   background: linear-gradient(120deg,
-    rgba(79, 70, 229, 0.22) 0%,
-    rgba(6, 182, 212, 0.20) 100%);
-  color: var(--accent);
+    rgba(79, 70, 229, 0.18) 0%,
+    rgba(6, 182, 212, 0.18) 100%);
+  color: #4f46e5;
   font: inherit;
   font-size: 0.88rem;
   font-weight: 600;
@@ -155,9 +158,9 @@ label[for="date-input"] {
 }
 .btn-primary:hover {
   background: linear-gradient(120deg,
-    rgba(79, 70, 229, 0.32) 0%,
-    rgba(6, 182, 212, 0.28) 100%);
-  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.18);
+    rgba(79, 70, 229, 0.26) 0%,
+    rgba(6, 182, 212, 0.24) 100%);
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.16);
 }
 .btn-primary:active { transform: translateY(1px); }
 .btn-primary:disabled {
@@ -218,12 +221,12 @@ label[for="date-input"] {
   transition: background 0.14s;
 }
 .recent-list a:hover {
-  background: rgba(0, 0, 0, 0.04);
+  background: rgba(79, 70, 229, 0.06);
   color: var(--text-bright);
 }
 .recent-list a:hover::before { background: var(--text-muted); }
 .recent-list .is-active a {
-  background: var(--accent-soft);
+  background: rgba(79, 70, 229, 0.10);
   color: var(--text-bright);
   font-weight: 600;
 }
@@ -245,6 +248,37 @@ label[for="date-input"] {
   color: var(--text-dim);
   font-size: 0.85rem;
   padding: 6px 10px;
+}
+
+.sidebar-quick-link {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--text-bright);
+  text-decoration: none;
+  font-size: 0.88rem;
+  font-weight: 700;
+  transition: background 0.14s, border-color 0.14s, color 0.14s;
+}
+.sidebar-quick-link:hover {
+  background: rgba(79, 70, 229, 0.08);
+  border-color: var(--accent-strong);
+  color: var(--text-bright);
+}
+.quick-link-icon {
+  display: inline-flex;
+  width: 20px;
+  height: 20px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(79, 70, 229, 0.12);
+  color: #4f46e5;
+  line-height: 1;
 }
 
 /* === Main area === */
@@ -308,6 +342,46 @@ label[for="date-input"] {
   font-weight: 700;
   color: var(--text-bright);
   letter-spacing: -0.005em;
+}
+.status-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+.status-kicker {
+  margin: 0 0 5px;
+  color: var(--text-muted);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+.task-chip {
+  flex: 0 0 auto;
+  padding: 4px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-family: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 0.72rem;
+}
+.diagnostic-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-bottom: 12px;
+}
+.diagnostic-strip span {
+  padding: 4px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  font-weight: 600;
 }
 .run-log {
   background: var(--code-bg);
@@ -374,12 +448,22 @@ label[for="date-input"] {
     --danger-soft: rgba(248, 113, 113, 0.12);
   }
   /* Patch the few spots that hardcode light colors. */
-  .brand-icon .logo-mark { fill: #e0405f; }      /* lighter red reads better on near-black */
-  .brand-icon .logo-sparkle { fill: #fbbf24; }   /* brighter amber on dark */
+  #sidebar { background: linear-gradient(180deg, #161922 0%, #121722 100%); }
+  .brand-icon .logo-mark { fill: #818cf8; }
+  .brand-icon .logo-sparkle { fill: #fbbf24; }
+  .sidebar-header .title {
+    background: linear-gradient(120deg, #a5b4fc 0%, #22d3ee 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
   .sidebar-header .kicker { color: var(--text-muted); }
   #date-input { background: var(--surface); }
   #date-input:hover { border-color: var(--border-strong); }
   .recent-list a:hover { background: rgba(255, 255, 255, 0.05); }
+  .recent-list .is-active a { background: rgba(56, 189, 248, 0.14); }
+  .sidebar-quick-link { background: rgba(255, 255, 255, 0.03); }
+  .sidebar-quick-link:hover { background: rgba(56, 189, 248, 0.10); }
   .alert { background: var(--surface); }
   *::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.12); }
   *::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.22); }

@@ -7,9 +7,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet"
-        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" />
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Manrope:wght@700;800&display=swap" />
   <script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js"></script>
-  <link rel="stylesheet" href="/static/style.css?v=20" />
+  <link rel="stylesheet" href="/static/style.css?v=29" />
   {% block head %}{% endblock %}
 </head>
 <body>
@@ -46,6 +46,13 @@
            hx-swap="innerHTML">
         {{ controls_html|safe }}
       </div>
+    </section>
+
+    <section class="sidebar-block">
+      <a class="sidebar-quick-link" href="/starred">
+        <span class="quick-link-icon" aria-hidden="true">★</span>
+        <span>Starred paper list</span>
+      </a>
     </section>
 
     <section class="sidebar-block">

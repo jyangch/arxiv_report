@@ -1,7 +1,11 @@
 """LLM provider clients, individual generators, and the fallback dispatcher."""
 
 import json
+import os
+from pathlib import Path
+import shutil
 import subprocess
+import tempfile
 import time
 
 import anthropic
@@ -12,10 +16,12 @@ from core.config import (
     CLAUDE_API_KEY,
     CLAUDE_BACKEND,
     CLAUDE_MODEL,
+    CODEX_CLI,
     FALLBACK_ORDER,
     GEMINI_API_KEY,
     GEMINI_MODEL,
     OPENAI_API_KEY,
+    OPENAI_BACKEND,
     OPENAI_MODEL,
     PREFERRED_PROVIDER,
 )
@@ -24,6 +30,14 @@ from core.prompt import build_prompt
 claude_client = anthropic.Anthropic(api_key=CLAUDE_API_KEY) if CLAUDE_API_KEY else None
 gemini_client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 openai_client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
+DEFAULT_CODEX_CLI_PATHS = (
+    '/opt/homebrew/bin/codex',
+    '/usr/local/bin/codex',
+)
+CODEX_EXTRA_PATHS = (
+    '/opt/homebrew/bin',
+    '/usr/local/bin',
+)
 
 
 def _is_quota_error(error: Exception) -> bool:
@@ -165,7 +179,7 @@ def _generate_with_gemini(prompt: str) -> str:
     return response.text
 
 
-def _generate_with_openai(prompt: str) -> str:
+def _generate_with_openai_api(prompt: str) -> str:
     if not openai_client:
         raise RuntimeError('OpenAI API key is missing. Set OPENAI_API_KEY.')
     response = openai_client.chat.completions.create(
@@ -173,6 +187,71 @@ def _generate_with_openai(prompt: str) -> str:
         messages=[{'role': 'user', 'content': prompt}],
     )
     return response.choices[0].message.content
+
+
+def _generate_with_openai_codex(prompt: str) -> str:
+    """Headless Codex CLI backend, using the logged-in ChatGPT/Codex account."""
+    with tempfile.TemporaryDirectory(prefix='arxiv-report-codex-') as tmp_dir:
+        output_path = Path(tmp_dir) / 'last-message.txt'
+        codex_cli = _codex_cli()
+        args = [
+            codex_cli,
+            'exec',
+            '--model',
+            OPENAI_MODEL,
+            '--sandbox',
+            'read-only',
+            '--skip-git-repo-check',
+            '--ephemeral',
+            '--ignore-user-config',
+            '--ignore-rules',
+            '--output-last-message',
+            str(output_path),
+            '-',
+        ]
+        try:
+            subprocess.run(
+                args,
+                input=prompt,
+                capture_output=True,
+                text=True,
+                check=True,
+                env=_codex_env(codex_cli),
+            )
+        except subprocess.CalledProcessError as exc:
+            detail = (exc.stderr or exc.stdout or str(exc)).strip()
+            raise RuntimeError(f'Codex CLI failed with exit code {exc.returncode}: {detail}') from exc
+        return output_path.read_text(encoding='utf-8').strip()
+
+
+def _codex_cli() -> str:
+    if CODEX_CLI:
+        return CODEX_CLI
+    path = shutil.which('codex')
+    if path:
+        return path
+    for path in DEFAULT_CODEX_CLI_PATHS:
+        if Path(path).exists():
+            return path
+    return 'codex'
+
+
+def _codex_env(codex_cli: str) -> dict[str, str]:
+    env = os.environ.copy()
+    path_parts = [str(Path(codex_cli).parent), *CODEX_EXTRA_PATHS]
+    existing = env.get('PATH')
+    if existing:
+        path_parts.append(existing)
+    env['PATH'] = ':'.join(dict.fromkeys(path_parts))
+    return env
+
+
+def _generate_with_openai(prompt: str) -> str:
+    if OPENAI_BACKEND == 'api' and openai_client:
+        return _generate_with_openai_api(prompt)
+    if OPENAI_BACKEND == 'api':
+        print('   [openai] OPENAI_BACKEND=api but OPENAI_API_KEY is missing; using Codex CLI.')
+    return _generate_with_openai_codex(prompt)
 
 
 _GENERATORS = {
