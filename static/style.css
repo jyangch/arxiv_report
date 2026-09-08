@@ -368,21 +368,6 @@ label[for="date-input"] {
   font-family: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
   font-size: 0.72rem;
 }
-.diagnostic-strip {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
-  margin-bottom: 12px;
-}
-.diagnostic-strip span {
-  padding: 4px 9px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--surface);
-  color: var(--text-muted);
-  font-size: 0.74rem;
-  font-weight: 600;
-}
 .run-log {
   background: var(--code-bg);
   color: var(--code-text);
