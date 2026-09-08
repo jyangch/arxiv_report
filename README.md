@@ -50,8 +50,8 @@ Set API keys, models, and provider backends via environment variables (all optio
 | `FALLBACK_ORDER` | Comma-separated fallback order | `openai` |
 | `OPENAI_BACKEND` | `codex` (consumes ChatGPT/Codex subscription via Codex CLI) or `api` (consumes API credits) | `codex` |
 | `OPENAI_API_KEY` | OpenAI API key -- only needed when `OPENAI_BACKEND=api` | — |
-| `OPENAI_MODEL` | OpenAI/Codex model name | `gpt-5.4` |
-| `CODEX_CLI` | Optional absolute path to the Codex CLI, useful for launchd services with a minimal `PATH` | auto-detected |
+| `OPENAI_MODEL` | OpenAI/Codex model name | `gpt-5.5` |
+| `CODEX_CLI` | Optional absolute path to the Codex CLI; otherwise the ChatGPT-bundled CLI is preferred when available | auto-detected |
 | `CLAUDE_BACKEND` | `cli` (consumes Max quota via Claude Code) or `api` (consumes API credits) | `cli` |
 | `CLAUDE_API_KEY` | Anthropic Claude API key -- only needed when `CLAUDE_BACKEND=api` | — |
 | `CLAUDE_MODEL` | Claude model name (API backend only) | `claude-opus-4-6` |

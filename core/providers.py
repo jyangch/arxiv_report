@@ -31,6 +31,7 @@ claude_client = anthropic.Anthropic(api_key=CLAUDE_API_KEY) if CLAUDE_API_KEY el
 gemini_client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 openai_client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 DEFAULT_CODEX_CLI_PATHS = (
+    '/Applications/ChatGPT.app/Contents/Resources/codex',
     '/opt/homebrew/bin/codex',
     '/usr/local/bin/codex',
 )
@@ -227,12 +228,12 @@ def _generate_with_openai_codex(prompt: str) -> str:
 def _codex_cli() -> str:
     if CODEX_CLI:
         return CODEX_CLI
-    path = shutil.which('codex')
-    if path:
-        return path
     for path in DEFAULT_CODEX_CLI_PATHS:
         if Path(path).exists():
             return path
+    path = shutil.which('codex')
+    if path:
+        return path
     return 'codex'
 
 

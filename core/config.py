@@ -20,7 +20,7 @@ GEMINI_MODEL = os.getenv('GEMINI_MODEL', 'gemini-3.1-flash-lite-preview')
 
 OPENAI_BACKEND = os.getenv('OPENAI_BACKEND', 'codex')
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '')
-OPENAI_MODEL = os.getenv('OPENAI_MODEL', 'gpt-5.4')
+OPENAI_MODEL = os.getenv('OPENAI_MODEL', 'gpt-5.5')
 CODEX_CLI = os.getenv('CODEX_CLI', '')
 
 CRAFT_SPACE_ID = os.getenv('CRAFT_SPACE_ID', '0157a916-ccf1-69d4-d6d4-42c851841de3')
