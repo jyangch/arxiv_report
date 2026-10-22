@@ -12,6 +12,7 @@ Automatically fetches the latest papers from the arXiv `astro-ph.HE` (High Energ
 - Self-contained styled HTML reports (light / dark adaptive, internal anchor scrolling)
 - FastAPI + HTMX web UI: per-date URLs, sidebar history, live SSE progress
 - Per-paper "Save to Craft" button: hands off a new Craft document (title, authors, method/results/caveats, optional personal note) via the `craftdocs://` URL scheme
+- Starred / Craft marks are saved server-side in `reports/paper_state.json`, so the Starred paper list survives cleared browser data
 
 ## Project layout
 
@@ -21,6 +22,7 @@ Automatically fetches the latest papers from the arXiv `astro-ph.HE` (High Energ
 ├── report.py              CLI entry (cron / one-off)
 ├── core/                  domain package
 │   ├── fetcher.py           arXiv API + RSS fallback
+│   ├── paper_state.py       server-side starred / crafted store
 │   ├── providers.py         Claude / Gemini / OpenAI clients + fallback dispatcher
 │   ├── prompt.py            prompt builder
 │   ├── pub_status.py        publication-status classifier
@@ -28,6 +30,7 @@ Automatically fetches the latest papers from the arXiv `astro-ph.HE` (High Energ
 │   └── config.py            env vars + defaults
 ├── templates/             Jinja2 base + partials for the web UI
 ├── static/style.css       sidebar + main chrome
+├── static/paper_state.js  syncs starred / crafted marks with the server
 ├── tests/                 pytest suite (31 cases)
 └── reports/               generated daily reports (gitignored)
 ```

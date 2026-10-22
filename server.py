@@ -11,10 +11,12 @@ import time
 import uuid
 
 from fastapi import FastAPI, Form, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel
 
+from core import paper_state
 from core.config import CLAUDE_BACKEND, FALLBACK_ORDER, OPENAI_BACKEND, PREFERRED_PROVIDER
 from core.fetcher import (
     ARXIV_COOLDOWN_PATH,
@@ -77,17 +79,28 @@ def _file_version(path: str) -> str:
         return str(int(time.time() * 1000))
 
 
-def _raw_html_response(path: str) -> FileResponse:
-    """Serve generated HTML without browser caching stale iframe content."""
-    return FileResponse(
-        path,
-        media_type='text/html',
-        headers={
-            'Cache-Control': 'no-store, max-age=0',
-            'Pragma': 'no-cache',
-            'Expires': '0',
-        },
-    )
+_NO_STORE_HEADERS = {
+    'Cache-Control': 'no-store, max-age=0',
+    'Pragma': 'no-cache',
+    'Expires': '0',
+}
+_PAPER_STATE_JS = os.path.join('static', 'paper_state.js')
+
+
+def _raw_html_response(path: str) -> HTMLResponse:
+    """Serve generated HTML without browser caching stale iframe content.
+
+    The paper-state sync script is injected at the top of ``<head>`` so it
+    runs before the page's own scripts read ``localStorage``. Injecting at
+    serve time covers reports generated before the sync existed.
+    """
+    with open(path, encoding='utf-8-sig') as f:
+        html = f.read()
+    tag = f'<script src="/static/paper_state.js?v={_file_version(_PAPER_STATE_JS)}"></script>'
+    html, n = re.subn(r'<head[^>]*>', lambda m: m.group(0) + tag, html, count=1)
+    if n == 0:
+        html = tag + html
+    return HTMLResponse(html, headers=_NO_STORE_HEADERS)
 
 
 def _arxiv_cooldown_remaining() -> int:
@@ -195,11 +208,7 @@ def _render_home(
             'main_content': main_content,
             'controls_html': _render_controls(selected_date),
         },
-        headers={
-            'Cache-Control': 'no-store, max-age=0',
-            'Pragma': 'no-cache',
-            'Expires': '0',
-        },
+        headers=_NO_STORE_HEADERS,
     )
 
 
@@ -279,7 +288,7 @@ def report_page(date: str, request: Request) -> HTMLResponse:
 
 
 @app.get('/r/{date}/raw')
-def report_raw(date: str) -> FileResponse:
+def report_raw(date: str) -> HTMLResponse:
     """Serve the raw report HTML for the iframe ``src``."""
     parsed = _parse_date(date)
     if parsed is None:
@@ -292,21 +301,41 @@ def report_raw(date: str) -> FileResponse:
 
 @app.get('/starred', response_class=HTMLResponse)
 def starred_page(request: Request) -> HTMLResponse:
-    """Main page for the browser-local starred/Craft collection."""
+    """Main page for the starred/Craft collection."""
     path = os.path.join(REPORTS_DIR, STARRED_REPORT)
     main = _render_partial('partials/starred_frame.html', raw_version=_file_version(path))
     return _render_home(request, None, main)
 
 
 @app.get('/starred/raw')
-def starred_raw() -> FileResponse:
-    """Serve the standalone browser-local starred/Craft collection."""
+def starred_raw() -> HTMLResponse:
+    """Serve the standalone starred/Craft collection page."""
     path = os.path.join(REPORTS_DIR, STARRED_REPORT)
     if not os.path.exists(path):
         from core.render import _write_starred_html
 
         _write_starred_html(provider='local')
     return _raw_html_response(path)
+
+
+@app.get('/api/paper-state')
+def paper_state_get() -> JSONResponse:
+    """Return every stored starred / crafted key with its paper snapshot."""
+    return JSONResponse(paper_state.load_state(paper_state.STATE_PATH), headers=_NO_STORE_HEADERS)
+
+
+class PaperStatePatch(BaseModel):
+    """One batch of ``localStorage`` writes mirrored from the browser."""
+
+    set: dict[str, str] = {}
+    remove: list[str] = []
+
+
+@app.post('/api/paper-state')
+def paper_state_post(patch: PaperStatePatch) -> JSONResponse:
+    """Apply mirrored starred / crafted writes and report the stored key count."""
+    state = paper_state.apply_changes(patch.set, patch.remove, paper_state.STATE_PATH)
+    return JSONResponse({'count': len(state)}, headers=_NO_STORE_HEADERS)
 
 
 @app.post('/generate', response_class=HTMLResponse)
