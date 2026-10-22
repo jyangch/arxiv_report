@@ -6,9 +6,9 @@ All values come from environment variables; defaults are baked in for offline ru
 
 import os
 
-PREFERRED_PROVIDER = os.getenv('PREFERRED_PROVIDER', 'openai')  # 'claude' | 'gemini' | 'openai'
+PREFERRED_PROVIDER = os.getenv('PREFERRED_PROVIDER', 'claude')  # 'claude' | 'gemini' | 'openai'
 FALLBACK_ORDER = tuple(
-    p.strip() for p in os.getenv('FALLBACK_ORDER', 'openai').split(',') if p.strip()
+    p.strip() for p in os.getenv('FALLBACK_ORDER', 'claude').split(',') if p.strip()
 )
 
 CLAUDE_BACKEND = os.getenv('CLAUDE_BACKEND', 'cli')

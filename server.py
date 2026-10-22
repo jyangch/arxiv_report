@@ -15,7 +15,7 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Stre
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from core.config import FALLBACK_ORDER, OPENAI_BACKEND, PREFERRED_PROVIDER
+from core.config import CLAUDE_BACKEND, FALLBACK_ORDER, OPENAI_BACKEND, PREFERRED_PROVIDER
 from core.fetcher import (
     ARXIV_COOLDOWN_PATH,
     ARXIV_COOLDOWN_SECONDS,
@@ -141,7 +141,7 @@ def _worker(task_id: str, as_of: datetime.datetime, date_str: str) -> None:
     task['messages'].append(
         'Provider preference: '
         f'{PREFERRED_PROVIDER}; fallback: {", ".join(FALLBACK_ORDER) or "none"}; '
-        f'OpenAI backend: {OPENAI_BACKEND}'
+        f'Claude backend: {CLAUDE_BACKEND}; OpenAI backend: {OPENAI_BACKEND}'
     )
     task['messages'].append(f'Fetch anchor: {as_of.isoformat()}')
     task['messages'].append('Fetching arXiv papers...')
