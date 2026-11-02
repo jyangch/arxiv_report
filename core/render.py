@@ -2,11 +2,23 @@
 
 import datetime
 import os
+import re
 
 from core.config import CRAFT_ARXIV_FOLDER_ID, CRAFT_SPACE_ID
 
 REPORTS_DIR = './reports'
 STARRED_REPORT = 'starred.html'
+
+# LLM sometimes splits the tag, e.g. `[Theory</span><span class="method-tag">]</span>`
+_METHOD_TAG_RE = re.compile(
+    r'<span class="method-tag">\s*\[?\s*([A-Za-z]+)\s*\]?\s*</span>'
+    r'(?:\s*<span class="method-tag">\s*\]\s*</span>|\])?'
+)
+
+
+def normalize_method_tags(html: str) -> str:
+    """Rewrite every method tag into the canonical `<span class="method-tag">[Tag]</span>` form."""
+    return _METHOD_TAG_RE.sub(r'<span class="method-tag">[\1]</span>', html)
 
 
 def _write_starred_html(provider: str, as_of: datetime.datetime | None = None) -> str:
@@ -787,7 +799,7 @@ def save_html(
         The path the file was written to (relative to the working directory).
     """
     date_str = (as_of or datetime.datetime.now()).strftime('%Y-%m-%d')
-    body_content = report.replace('```html', '').replace('```', '')
+    body_content = normalize_method_tags(report.replace('```html', '').replace('```', ''))
     html_layout = f"""\
 <!DOCTYPE html>
 <html lang="zh-CN">
