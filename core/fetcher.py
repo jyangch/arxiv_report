@@ -20,6 +20,8 @@ ARXIV_QUERY = 'cat:astro-ph.he'
 ARXIV_MAX_RESULTS = 500
 ARXIV_TZ = pytz.timezone('US/Eastern')
 ARXIV_RSS_URL = 'http://export.arxiv.org/rss/astro-ph.HE'
+ARXIV_LISTING_URL = 'https://arxiv.org/list/astro-ph.HE/pastweek?show=2000'
+ARXIV_LISTING_TTL_SECONDS = 10 * 60  # in-process reuse of the pastweek page
 ARXIV_CACHE_DIR = './reports/.cache'
 ARXIV_COOLDOWN_PATH = './reports/.cache/arxiv_api_cooldown'
 ARXIV_COOLDOWN_SECONDS = 30 * 60  # after a 429, skip the api for 30 minutes
@@ -52,6 +54,21 @@ _ABS_DOI_RE = re.compile(
 _ABS_SUBMITTED_RE = re.compile(
     r'\[v1\].*?(\w{3}, \d{1,2} \w{3} \d{4} \d{2}:\d{2}:\d{2})\s+UTC', re.DOTALL
 )
+_ABS_TITLE_RE = re.compile(r'<meta name="citation_title" content="([^"]*)"')
+_ABS_ABSTRACT_RE = re.compile(r'<meta name="citation_abstract" content="([^"]*)"', re.DOTALL)
+_ABS_VERSION_URL_RE = re.compile(
+    r'<meta property="og:url" content="https?://arxiv\.org/abs/([^"]+)"'
+)
+_ABS_AUTHORS_RE = re.compile(r'<div class="authors">(.*?)</div>', re.DOTALL)
+_ABS_SUBJECTS_RE = re.compile(r'<td class="tablecell subjects">(.*?)</td>', re.DOTALL)
+_ANCHOR_TEXT_RE = re.compile(r'<a [^>]*>([^<]+)</a>')
+_SUBJECT_CODE_RE = re.compile(r'\(([a-z\-]+(?:\.[A-Za-z\-]+)?)\)')
+
+# Pastweek listing markup: one ``<h3>Mon, 2 Nov 2026 (showing N of N entries )</h3>``
+# per announcement, followed by its new + cross-listed entries (no replacements).
+_LISTING_HEAD_RE = re.compile(r'<h3>\s*\w{3}, (\d{1,2} \w{3} \d{4})')
+_LISTING_ID_RE = re.compile(r'<a href ?="/abs/([^"]+)" title="Abstract"')
+_listing_memo: dict = {'fetched_at': 0.0, 'listings': None}
 
 
 def get_arxiv_sync_window(
@@ -146,6 +163,11 @@ def describe_empty_window(as_of: datetime.datetime | None = None) -> str:
     holiday = _arxiv_holiday_name(day)
     if holiday:
         return f'{day:%Y-%m-%d} is {holiday}; arXiv defers announcements on this holiday.'
+    if _listing_state(day, _fetch_listings()) == 'skipped':
+        return (
+            f'arXiv published no listing dated {day:%Y-%m-%d}; its submissions were '
+            'announced in the next listing instead.'
+        )
     return (
         f'No papers came back for {day:%Y-%m-%d}. That is unexpected for a weekday -- '
         'arXiv was likely rate-limiting the fetch. Try generating again in a few minutes.'
@@ -212,20 +234,28 @@ def _fetch_abs_metadata(
     Used to backfill fields missing in the RSS fallback and to recover each
     paper's submission time (RSS exposes only the announcement date). The
     arxiv.org/abs host is separate from export.arxiv.org/api and rarely 429s.
+    """
+    html = _fetch_html(f'https://arxiv.org/abs/{arxiv_id}', timeout, max_retries)
+    return (
+        _first_match(_ABS_COMMENTS_RE, html),
+        _first_match(_ABS_JREF_RE, html),
+        _first_match(_ABS_DOI_RE, html),
+        _parse_abs_submitted(html),
+    )
+
+
+def _fetch_html(url: str, timeout: float = 20.0, max_retries: int = 2) -> str:
+    """GET ``url`` from arxiv.org and return the decoded body.
 
     Retries on transient failures (read timeout, connection error, 5xx) up to
     ``max_retries`` times with a 1-second backoff; 4xx HTTP responses are
     raised immediately because they do not improve on retry.
     """
-    url = f'https://arxiv.org/abs/{arxiv_id}'
     req = urllib.request.Request(url, headers={'User-Agent': 'arxiv-report/1.0'})
-
-    html = ''
     for attempt in range(max_retries + 1):
         try:
             with urllib.request.urlopen(req, timeout=timeout) as resp:
-                html = resp.read().decode('utf-8', errors='replace')
-            break
+                return resp.read().decode('utf-8', errors='replace')
         except _UrllibHTTPError as e:
             if 400 <= getattr(e, 'code', 0) < 500 or attempt >= max_retries:
                 raise
@@ -233,17 +263,119 @@ def _fetch_abs_metadata(
             if attempt >= max_retries:
                 raise
         time.sleep(1)
+    return ''
 
-    def first(regex: re.Pattern) -> str:
-        m = regex.search(html)
-        return _html_unescape(m.group(1)).strip() if m else ''
 
-    return (
-        first(_ABS_COMMENTS_RE),
-        first(_ABS_JREF_RE),
-        first(_ABS_DOI_RE),
-        _parse_abs_submitted(html),
-    )
+def _first_match(regex: re.Pattern, html: str) -> str:
+    """Return the first capture group of ``regex`` in ``html``, unescaped and stripped."""
+    m = regex.search(html)
+    return _html_unescape(m.group(1)).strip() if m else ''
+
+
+def _parse_abs_paper(html: str, arxiv_id: str) -> dict:
+    """Build a paper dict (same keys as the API path) from abs-page HTML."""
+    versioned = _first_match(_ABS_VERSION_URL_RE, html) or arxiv_id
+    authors_m = _ABS_AUTHORS_RE.search(html)
+    authors = _ANCHOR_TEXT_RE.findall(authors_m.group(1)) if authors_m else []
+    subjects_m = _ABS_SUBJECTS_RE.search(html)
+    categories = _SUBJECT_CODE_RE.findall(subjects_m.group(1)) if subjects_m else []
+    return {
+        'title': ' '.join(_first_match(_ABS_TITLE_RE, html).split()),
+        'authors': ', '.join(_html_unescape(a).strip() for a in authors),
+        'summary': _first_match(_ABS_ABSTRACT_RE, html),
+        'url': f'http://arxiv.org/abs/{versioned}',
+        'pdf_url': f'https://arxiv.org/pdf/{versioned}',
+        'categories': categories,
+        'comment': _first_match(_ABS_COMMENTS_RE, html),
+        'journal_ref': _first_match(_ABS_JREF_RE, html),
+        'doi': _first_match(_ABS_DOI_RE, html),
+    }
+
+
+def _parse_listing(html: str) -> dict[datetime.date, list[str]]:
+    """Map each announcement date on a pastweek page to its arXiv ids, in page order."""
+    listings = {}
+    heads = list(_LISTING_HEAD_RE.finditer(html))
+    for i, head in enumerate(heads):
+        stop = heads[i + 1].start() if i + 1 < len(heads) else len(html)
+        day = datetime.datetime.strptime(head.group(1), '%d %b %Y').date()
+        listings[day] = list(dict.fromkeys(_LISTING_ID_RE.findall(html[head.end() : stop])))
+    return listings
+
+
+def _fetch_listings() -> dict[datetime.date, list[str]] | None:
+    """Return the pastweek announcements, or ``None`` if the page is unreachable.
+
+    The page is reused in-process for ``ARXIV_LISTING_TTL_SECONDS`` so that a
+    fetch followed by ``describe_empty_window`` costs one request.
+    """
+    if (
+        _listing_memo['listings'] is not None
+        and time.time() - _listing_memo['fetched_at'] < ARXIV_LISTING_TTL_SECONDS
+    ):
+        return _listing_memo['listings']
+    try:
+        listings = _parse_listing(_fetch_html(ARXIV_LISTING_URL))
+    except Exception as e:
+        print(f'⚠️  pastweek listing fetch failed: {e}')
+        return None
+    if not listings:
+        print('⚠️  pastweek listing had no announcement headings; ignoring it.')
+        return None
+    _listing_memo.update(fetched_at=time.time(), listings=listings)
+    return listings
+
+
+def _listing_state(day: datetime.date, listings: dict | None) -> str:
+    """Classify ``day`` against the pastweek page.
+
+    Returns ``'listed'`` (an announcement dated ``day`` exists), ``'pending'``
+    (newer than the latest announcement, i.e. not out yet), ``'skipped'``
+    (inside the covered range but arXiv published nothing dated ``day``) or
+    ``'unknown'`` (page unavailable, or ``day`` older than the page covers).
+    """
+    if not listings:
+        return 'unknown'
+    if day in listings:
+        return 'listed'
+    if day > max(listings):
+        return 'pending'
+    if day > min(listings):
+        return 'skipped'
+    return 'unknown'
+
+
+def _listing_cache_path(day: datetime.date) -> str:
+    """Build the per-announcement cache file path."""
+    return os.path.join(ARXIV_CACHE_DIR, f'arxiv_listing_{day:%Y%m%d}.json')
+
+
+def _fetch_via_listing(
+    day: datetime.date, arxiv_ids: list[str], max_workers: int = 5
+) -> list[dict]:
+    """Fetch every paper of one announcement from its abs page.
+
+    Raises ``RuntimeError`` if any abs page fails, so a partial announcement is
+    never returned (and therefore never cached).
+    """
+    print(f'📰 Listing dated {day} has {len(arxiv_ids)} papers; fetching abs pages…')
+
+    def fetch_one(arxiv_id: str) -> dict | None:
+        try:
+            return _parse_abs_paper(_fetch_html(f'https://arxiv.org/abs/{arxiv_id}'), arxiv_id)
+        except Exception as e:
+            print(f'  ⚠️  abs-page fetch failed for {arxiv_id}: {e}')
+            return None
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as ex:
+        papers = list(ex.map(fetch_one, arxiv_ids))
+    missing = [i for i, p in zip(arxiv_ids, papers, strict=True) if p is None or not p['title']]
+    if missing:
+        raise RuntimeError(
+            f'{len(missing)} of {len(arxiv_ids)} abs pages for the {day} listing failed '
+            f'({", ".join(missing[:5])}); retry in a few minutes.'
+        )
+    return [p for p in papers if p is not None]
 
 
 def _enrich_papers(papers: list[dict], max_workers: int = 5) -> None:
@@ -427,9 +559,17 @@ def _filter_to_window(
 
 
 def fetch_arxiv_papers(as_of: datetime.datetime | None = None) -> list[dict]:
-    """Fetch arXiv astro-ph.HE papers within the sync window.
+    """Fetch the arXiv astro-ph.HE papers announced in the listing dated ``as_of``.
 
-    Tries the Atom query API first (supports any historical date). If arXiv
+    The pastweek listing page is the source of truth for the last ~5
+    announcements: its ids (new + cross-lists) are fetched from abs pages, so
+    the report matches what arXiv actually announced even when arXiv skips or
+    merges an announcement, or the query API returns a partial window. A date
+    newer than the latest announcement raises (not out yet, retry later); a
+    date arXiv skipped returns ``[]``.
+
+    Older dates, or an unreachable listing page, fall back to the submission
+    window below. There the Atom query API is tried first. If arXiv
     returns HTTP 429 after retries *and* the requested window is the most
     recent announcement (``end_t`` within ~26h of now), falls back to the RSS
     feed, which is less rate-limited but only carries the latest announcement.
@@ -447,6 +587,33 @@ def fetch_arxiv_papers(as_of: datetime.datetime | None = None) -> list[dict]:
 
     if start_t >= end_t:
         print('✅ Empty window (weekend); nothing to fetch.')
+        return []
+
+    day = (as_of.astimezone(ARXIV_TZ) if as_of else datetime.datetime.now(ARXIV_TZ)).date()
+    listing_cache = _listing_cache_path(day)
+    if os.path.exists(listing_cache):
+        with open(listing_cache, encoding='utf-8') as f:
+            papers = json.load(f)
+        print(f'📁 Listing cache hit ({len(papers)} papers); skipping arXiv request.')
+        return papers
+
+    listings = _fetch_listings()
+    state = _listing_state(day, listings)
+    if state == 'listed' and listings:
+        papers = _fetch_via_listing(day, listings[day]) if listings[day] else []
+        if papers:
+            os.makedirs(ARXIV_CACHE_DIR, exist_ok=True)
+            with open(listing_cache, 'w', encoding='utf-8') as f:
+                json.dump(papers, f, ensure_ascii=False, indent=2)
+        print(f'✅ Found {len(papers)} papers in the listing dated {day}.')
+        return papers
+    if state == 'pending' and listings:
+        raise RuntimeError(
+            f'arXiv has not published the listing dated {day} yet (latest is '
+            f'{max(listings)}); announcements go out at 20:00 ET, retry later.'
+        )
+    if state == 'skipped':
+        print(f'✅ arXiv published no listing dated {day}; nothing to fetch.')
         return []
 
     cached = _load_cache(start_t, end_t)
