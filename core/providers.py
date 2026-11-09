@@ -13,12 +13,14 @@ from google import genai
 from openai import OpenAI
 
 from core.config import (
+    AGY_CLI,
     CLAUDE_API_KEY,
     CLAUDE_BACKEND,
     CLAUDE_MODEL,
     CODEX_CLI,
     FALLBACK_ORDER,
     GEMINI_API_KEY,
+    GEMINI_BACKEND,
     GEMINI_MODEL,
     OPENAI_API_KEY,
     OPENAI_BACKEND,
@@ -30,6 +32,11 @@ from core.prompt import build_prompt
 claude_client = anthropic.Anthropic(api_key=CLAUDE_API_KEY) if CLAUDE_API_KEY else None
 gemini_client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 openai_client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
+DEFAULT_AGY_CLI_PATHS = (
+    str(Path.home() / '.local' / 'bin' / 'agy'),
+    '/opt/homebrew/bin/agy',
+    '/usr/local/bin/agy',
+)
 DEFAULT_CODEX_CLI_PATHS = (
     '/Applications/ChatGPT.app/Contents/Resources/codex',
     '/opt/homebrew/bin/codex',
@@ -173,11 +180,131 @@ def _generate_with_claude(prompt: str) -> str:
     return _generate_with_claude_cli(prompt)
 
 
-def _generate_with_gemini(prompt: str) -> str:
+def _agy_cli() -> str:
+    if AGY_CLI:
+        return AGY_CLI
+    for path in DEFAULT_AGY_CLI_PATHS:
+        if Path(path).exists():
+            return path
+    path = shutil.which('agy')
+    if path:
+        return path
+    return 'agy'
+
+
+def _generate_with_gemini_api(prompt: str) -> str:
     if not gemini_client:
         raise RuntimeError('Gemini API key is missing. Set GEMINI_API_KEY.')
     response = gemini_client.models.generate_content(model=GEMINI_MODEL, contents=prompt)
     return response.text
+
+
+def _generate_with_gemini_cli(prompt: str) -> str:
+    """Headless Antigravity CLI (agy): streams progress, consumes Gemini subscription.
+
+    Uses ``--input-format stream-json --output-format stream-json`` so the full
+    prompt is piped over stdin without argv length limits and each text delta
+    is surfaced live.
+
+    Raises:
+        subprocess.CalledProcessError: If the CLI exits non-zero.
+        RuntimeError: If the stream reports an error or ends without a ``result`` event.
+    """
+    proc = subprocess.Popen(
+        [
+            _agy_cli(),
+            '--model',
+            GEMINI_MODEL,
+            '--disable-slash-commands',
+            '--input-format',
+            'stream-json',
+            '--output-format',
+            'stream-json',
+            '-p',
+            '',
+        ],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    payload = json.dumps(
+        {'event': 'user', 'message': {'role': 'user', 'content': prompt}},
+        ensure_ascii=False,
+    )
+    proc.stdin.write(payload + '\n')
+    proc.stdin.close()
+
+    start = time.monotonic()
+    output_chars = 0
+    first_token_logged = False
+    last_tick = start
+    result_text: str | None = None
+    stream_error: str | None = None
+
+    try:
+        for line in proc.stdout:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            ev_type = event.get('event')
+            if ev_type == 'init':
+                model = event.get('init', {}).get('model') or GEMINI_MODEL
+                print(f'   [gemini] session started, model={model}')
+            elif ev_type == 'step_update':
+                step_update = event.get('step_update', {})
+                if step_update.get('step_type') == 'agent_response':
+                    text = step_update.get('text_delta', '')
+                    if text:
+                        now = time.monotonic()
+                        if not first_token_logged:
+                            print(f'   [gemini] first token at {now - start:.1f}s')
+                            first_token_logged = True
+                        output_chars += len(text)
+                        if now - last_tick >= 5:
+                            print(
+                                f'   [gemini] streaming... {output_chars} chars, '
+                                f'{now - start:.0f}s elapsed'
+                            )
+                            last_tick = now
+            elif ev_type == 'result':
+                res = event.get('result', {})
+                if res.get('status') == 'ERROR' or res.get('error'):
+                    stream_error = res.get('error') or 'unknown error'
+                else:
+                    result_text = res.get('response', '')
+                    print(
+                        f'   [gemini] done in {time.monotonic() - start:.0f}s, {output_chars} chars'
+                    )
+    except BaseException:
+        proc.kill()
+        raise
+
+    try:
+        proc.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait()
+
+    if stream_error:
+        raise RuntimeError(f'Gemini CLI error: {stream_error}')
+    if proc.returncode != 0:
+        stderr = proc.stderr.read() if proc.stderr else ''
+        raise subprocess.CalledProcessError(proc.returncode, proc.args, stderr=stderr)
+    if result_text is None:
+        raise RuntimeError('Gemini CLI finished without a result event.')
+    return result_text.strip()
+
+
+def _generate_with_gemini(prompt: str) -> str:
+    """Dispatch to the API SDK or Antigravity CLI depending on ``GEMINI_BACKEND``."""
+    if GEMINI_BACKEND == 'api':
+        return _generate_with_gemini_api(prompt)
+    return _generate_with_gemini_cli(prompt)
 
 
 def _generate_with_openai_api(prompt: str) -> str:
@@ -221,7 +348,9 @@ def _generate_with_openai_codex(prompt: str) -> str:
             )
         except subprocess.CalledProcessError as exc:
             detail = (exc.stderr or exc.stdout or str(exc)).strip()
-            raise RuntimeError(f'Codex CLI failed with exit code {exc.returncode}: {detail}') from exc
+            raise RuntimeError(
+                f'Codex CLI failed with exit code {exc.returncode}: {detail}'
+            ) from exc
         return output_path.read_text(encoding='utf-8').strip()
 
 

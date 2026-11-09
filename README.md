@@ -8,7 +8,7 @@ Automatically fetches the latest papers from the arXiv `astro-ph.HE` (High Energ
 - Supports arbitrary historical dates via arXiv's `submittedDate` range query
 - Classifies papers by research topic (GRBs, black holes, supernovae, cosmic rays, ...)
 - Generates Chinese-language summaries with method tags and key physical findings
-- Multi-provider LLM dispatch: Claude Code CLI (Claude subscription) by default, with optional OpenAI (Codex CLI or API) and Gemini fallback
+- Multi-provider LLM dispatch: Antigravity CLI (`agy`, Gemini Argon subscription) by default, with optional Claude (CLI or API) and OpenAI (Codex CLI or API) fallback
 - Self-contained styled HTML reports (light / dark adaptive, internal anchor scrolling)
 - FastAPI + HTMX web UI: per-date URLs, sidebar history, live SSE progress
 - Per-paper "Save to Craft" button: hands off a new Craft document (title, authors, method/results/caveats, optional personal note) via the `craftdocs://` URL scheme
@@ -41,7 +41,7 @@ Automatically fetches the latest papers from the arXiv `astro-ph.HE` (High Energ
 pip install -r requirements.txt
 ```
 
-For the default Claude backend, install Claude Code and log in once with `claude` (uses your Claude Pro/Max subscription). For the optional ChatGPT/Codex backend, install the Codex CLI and log in once with `codex login`.
+For the default Gemini backend, install the Antigravity CLI (`agy`) and log in once with `agy` (uses your Gemini subscription). For the optional Claude backend, install Claude Code and log in once with `claude` (uses your Claude Pro/Max subscription). For the optional ChatGPT/Codex backend, install the Codex CLI and log in once with `codex login`.
 
 ## Configuration
 
@@ -49,8 +49,12 @@ Set API keys, models, and provider backends via environment variables (all optio
 
 | Variable | Description | Default |
 |---|---|---|
-| `PREFERRED_PROVIDER` | Preferred LLM provider: `claude`, `openai`, or `gemini` | `claude` |
-| `FALLBACK_ORDER` | Comma-separated fallback order | `claude` |
+| `PREFERRED_PROVIDER` | Preferred LLM provider: `gemini`, `claude`, or `openai` | `gemini` |
+| `FALLBACK_ORDER` | Comma-separated fallback order | `gemini` |
+| `GEMINI_BACKEND` | `cli` (consumes Gemini subscription via `agy`) or `api` (consumes API credits) | `cli` |
+| `GEMINI_API_KEY` | Google Gemini API key -- only needed when `GEMINI_BACKEND=api` | — |
+| `GEMINI_MODEL` | Gemini / `agy` model name | `gemini-4-argon-high` |
+| `AGY_CLI` | Optional absolute path to the `agy` CLI | auto-detected |
 | `OPENAI_BACKEND` | `codex` (consumes ChatGPT/Codex subscription via Codex CLI) or `api` (consumes API credits) | `codex` |
 | `OPENAI_API_KEY` | OpenAI API key -- only needed when `OPENAI_BACKEND=api` | — |
 | `OPENAI_MODEL` | OpenAI/Codex model name | `gpt-5.5` |
@@ -58,25 +62,29 @@ Set API keys, models, and provider backends via environment variables (all optio
 | `CLAUDE_BACKEND` | `cli` (consumes Max quota via Claude Code) or `api` (consumes API credits) | `cli` |
 | `CLAUDE_API_KEY` | Anthropic Claude API key -- only needed when `CLAUDE_BACKEND=api` | — |
 | `CLAUDE_MODEL` | Claude model name (API backend only) | `claude-opus-4-6` |
-| `GEMINI_API_KEY` | Google Gemini API key | — |
-| `GEMINI_MODEL` | Gemini model name | `gemini-3.1-flash-lite-preview` |
 | `CRAFT_SPACE_ID` | Craft space ID for the "Save to Craft" button target folder | maintainer's own space |
 | `CRAFT_ARXIV_FOLDER_ID` | Craft folder ID new saved documents are created in | maintainer's own "arxiv Notes" folder |
 
-The Claude CLI backend always uses the `opus` model alias (hardcoded in `core/providers.py`). The preferred LLM provider can be set with `PREFERRED_PROVIDER` (`"claude"`, `"openai"`, or `"gemini"`). Defaults to `"claude"`.
+The Claude CLI backend always uses the `opus` model alias (hardcoded in `core/providers.py`). The preferred LLM provider can be set with `PREFERRED_PROVIDER` (`"gemini"`, `"claude"`, or `"openai"`). Defaults to `"gemini"`.
 
-By default, no fallback provider is attempted, so a normal run only consumes the logged-in Claude subscription. To switch back to ChatGPT/Codex, set `PREFERRED_PROVIDER=openai FALLBACK_ORDER=openai`; to enable multi-provider fallback, set for example `FALLBACK_ORDER=claude,openai,gemini`.
+By default, no fallback provider is attempted, so a normal run only consumes the logged-in Gemini subscription. To switch back to Claude or ChatGPT/Codex, set `PREFERRED_PROVIDER=claude FALLBACK_ORDER=claude` or `PREFERRED_PROVIDER=openai FALLBACK_ORDER=openai`; to enable multi-provider fallback, set for example `FALLBACK_ORDER=gemini,claude,openai`.
 
 ## Usage
 
 ### CLI
 
 ```bash
-# Default: today's report via Claude Code CLI (Claude subscription)
+# Default: today's report via Antigravity CLI (Gemini Argon subscription)
 python report.py
 
 # Generate a report for any historical date (uses arXiv's submittedDate range query)
 python report.py --date 2026-03-15
+
+# Switch Gemini to the API SDK:
+export GEMINI_BACKEND=api
+export GEMINI_API_KEY="your_api_key_here"
+export GEMINI_MODEL="gemini-3.1-flash-lite-preview"
+python report.py
 
 # Switch Claude to the API SDK:
 export CLAUDE_BACKEND=api
