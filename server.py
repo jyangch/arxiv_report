@@ -16,11 +16,13 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
-from core import paper_state
+from core import obsidian, paper_state
 from core.config import (
     CLAUDE_BACKEND,
     FALLBACK_ORDER,
     GEMINI_BACKEND,
+    OBSIDIAN_ARXIV_FOLDER,
+    OBSIDIAN_VAULT_PATH,
     OPENAI_BACKEND,
     PREFERRED_PROVIDER,
 )
@@ -308,7 +310,7 @@ def report_raw(date: str) -> HTMLResponse:
 
 @app.get('/starred', response_class=HTMLResponse)
 def starred_page(request: Request) -> HTMLResponse:
-    """Main page for the starred/Craft collection."""
+    """Render the main page for the starred / Obsidian collection."""
     path = os.path.join(REPORTS_DIR, STARRED_REPORT)
     main = _render_partial('partials/starred_frame.html', raw_version=_file_version(path))
     return _render_home(request, None, main)
@@ -316,7 +318,7 @@ def starred_page(request: Request) -> HTMLResponse:
 
 @app.get('/starred/raw')
 def starred_raw() -> HTMLResponse:
-    """Serve the standalone starred/Craft collection page."""
+    """Serve the standalone starred / Obsidian collection page."""
     path = os.path.join(REPORTS_DIR, STARRED_REPORT)
     if not os.path.exists(path):
         from core.render import _write_starred_html
@@ -327,12 +329,12 @@ def starred_raw() -> HTMLResponse:
 
 @app.get('/api/paper-state')
 def paper_state_get() -> JSONResponse:
-    """Return every stored starred / crafted key with its paper snapshot."""
+    """Return every stored starred / Obsidian key with its paper snapshot."""
     return JSONResponse(paper_state.load_state(paper_state.STATE_PATH), headers=_NO_STORE_HEADERS)
 
 
 class PaperStatePatch(BaseModel):
-    """One batch of ``localStorage`` writes mirrored from the browser."""
+    """Represent one batch of ``localStorage`` writes mirrored from the browser."""
 
     set: dict[str, str] = {}
     remove: list[str] = []
@@ -340,9 +342,57 @@ class PaperStatePatch(BaseModel):
 
 @app.post('/api/paper-state')
 def paper_state_post(patch: PaperStatePatch) -> JSONResponse:
-    """Apply mirrored starred / crafted writes and report the stored key count."""
+    """Apply mirrored starred / Obsidian writes and report the stored key count."""
     state = paper_state.apply_changes(patch.set, patch.remove, paper_state.STATE_PATH)
     return JSONResponse({'count': len(state)}, headers=_NO_STORE_HEADERS)
+
+
+class ObsidianSaveRequest(BaseModel):
+    """Represent paper metadata submitted to create or append an Obsidian note."""
+
+    arxiv_id: str
+    url: str = ''
+    title_en: str = ''
+    title_zh: str = ''
+    authors: str = ''
+    question: str = ''
+    method: str = ''
+    method_tag: str = ''
+    result: str = ''
+    caveat: str = ''
+    paper_status: str = 'submitted'
+    report_date: str = ''
+    note: str = ''
+
+
+@app.post('/api/obsidian/save')
+def obsidian_save(req: ObsidianSaveRequest) -> JSONResponse:
+    """Write or safely append a paper note in the local Obsidian vault folder."""
+    try:
+        result = obsidian.save_obsidian_note(
+            req.model_dump(),
+            vault_path=OBSIDIAN_VAULT_PATH,
+            folder_name=OBSIDIAN_ARXIV_FOLDER,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f'Obsidian write failed: {exc}') from exc
+    return JSONResponse(
+        {
+            'status': result['status'],
+            'filename': result['filename'],
+            'markdown': result['markdown'],
+        },
+        headers=_NO_STORE_HEADERS,
+    )
+
+
+@app.get('/api/obsidian/saved')
+def obsidian_saved() -> JSONResponse:
+    """Return sorted arXiv IDs already saved in the local Obsidian folder."""
+    ids = obsidian.list_saved_arxiv_ids(OBSIDIAN_VAULT_PATH, OBSIDIAN_ARXIV_FOLDER)
+    return JSONResponse({'arxiv_ids': ids}, headers=_NO_STORE_HEADERS)
 
 
 @app.post('/generate', response_class=HTMLResponse)

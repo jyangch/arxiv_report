@@ -1,10 +1,10 @@
-"""Server-side store for per-paper starred / crafted state.
+"""Server-side store for per-paper starred / Obsidian state.
 
 Report pages keep their state in browser ``localStorage`` under keys like
 ``arxiv-report:<date>:<arxiv id>:starred``. ``static/paper_state.js`` mirrors
 those keys here so the collection survives cleared browser data. Only the
-``starred`` / ``crafted`` flags are kept, plus the ``paper`` snapshot of any
-paper that still carries a flag (the starred list renders from it).
+``starred`` / ``obsidian`` (plus legacy ``crafted``) flags are kept, along with
+the ``paper`` snapshot of any paper that still carries a flag.
 """
 
 import json
@@ -16,7 +16,7 @@ from core.render import REPORTS_DIR
 STATE_PATH = os.path.join(REPORTS_DIR, 'paper_state.json')
 
 KEY_PREFIX = 'arxiv-report:'
-FLAG_KINDS = ('starred', 'crafted')
+FLAG_KINDS = ('starred', 'obsidian', 'crafted')
 MAX_VALUE_CHARS = 64_000
 
 _lock = threading.Lock()
