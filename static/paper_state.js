@@ -220,10 +220,12 @@
     }
 
     function yamlScalar(value, forceQuote) {
-        var raw = String(value || '').trim();
+        var raw = String(value || '')
+            .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f\u0085\u2028\u2029]+/g, ' ')
+            .trim();
         var reserved = {'true': 1, 'false': 1, 'null': 1, 'yes': 1, 'no': 1, 'on': 1, 'off': 1, '~': 1};
         if (!forceQuote && raw && !reserved[raw.toLowerCase()]) {
-            if (/^\d{4}-\d{2}-\d{2}$/.test(raw) || /^[A-Za-z0-9._\u0080-\uffff][A-Za-z0-9 ._\u0080-\uffff-]*$/.test(raw)) {
+            if (/^\d{4}-\d{2}-\d{2}$/.test(raw) || /^[A-Za-z_\u0080-\uffff][A-Za-z0-9 ._\u0080-\uffff-]*$/.test(raw)) {
                 return raw;
             }
         }
@@ -344,6 +346,9 @@
         if (!legacyButtons.length) return;
         injectLegacyObsidianStyles();
         document.querySelectorAll('.paper-item').forEach(syncLegacyCard);
+        document.addEventListener('paper-state-change', function() {
+            document.querySelectorAll('.paper-item').forEach(syncLegacyCard);
+        });
 
         document.addEventListener('click', function(e) {
             var craftBtn = e.target.closest ? e.target.closest('.craft-save-btn') : null;

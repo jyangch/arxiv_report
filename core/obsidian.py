@@ -6,19 +6,26 @@ are never overwritten; an optional personal note is appended instead.
 """
 
 from collections.abc import Mapping
+import contextlib
 import datetime
 import os
 import re
+import tempfile
+import threading
 from typing import Any
 
 _CONTROL_CHARS_RE = re.compile(r'[\x00-\x1f\x7f]+')
+_YAML_LINE_BREAK_CTRL_RE = re.compile(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f\u0085\u2028\u2029]+')
 _WHITESPACE_RE = re.compile(r'\s+')
 _LEADING_METHOD_TAG_RE = re.compile(r'^\s*\[([A-Za-z][A-Za-z0-9_-]*)\]\s*')
-_PLAIN_YAML_SCALAR_RE = re.compile(r'^[A-Za-z0-9._\u0080-\uffff][A-Za-z0-9 ._\u0080-\uffff-]*$')
+_PLAIN_YAML_SCALAR_RE = re.compile(r'^[A-Za-z_\u0080-\uffff][A-Za-z0-9 ._\u0080-\uffff-]*$')
 _ISO_DATE_RE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
 _SAVED_NOTE_RE = re.compile(r'^\[([^\]]+)\].*\.md$')
+_FRONTMATTER_ARXIV_RE = re.compile(r'(?m)^arxiv_id:\s*"?([^"\s]+)"?\s*$')
+_BODY_ARXIV_RE = re.compile(r'\[arXiv:([^\]\s]+)\]')
 _YAML_RESERVED = frozenset({'true', 'false', 'null', 'yes', 'no', 'on', 'off', '~'})
 _MAX_FILENAME_BYTES = 255
+_lock = threading.Lock()
 
 
 def _sanitize_filename_part(value: str) -> str:
@@ -29,7 +36,8 @@ def _sanitize_filename_part(value: str) -> str:
 
 
 def _yaml_scalar(value: str, *, force_quote: bool = False) -> str:
-    text = (value or '').strip()
+    text = _YAML_LINE_BREAK_CTRL_RE.sub(' ', value or '')
+    text = text.strip()
     if (
         not force_quote
         and text
@@ -70,11 +78,17 @@ def _extract_method_parts(method: str, method_tag: str) -> tuple[str, str]:
 
 
 def _atomic_write_text(path: str, content: str) -> None:
-    os.makedirs(os.path.dirname(path) or '.', exist_ok=True)
-    tmp_path = f'{path}.tmp.{os.getpid()}'
-    with open(tmp_path, 'w', encoding='utf-8') as f:
-        f.write(content)
-    os.replace(tmp_path, path)
+    directory = os.path.dirname(path) or '.'
+    os.makedirs(directory, exist_ok=True)
+    fd, tmp_path = tempfile.mkstemp(prefix='.obsidian-', suffix='.tmp', dir=directory)
+    try:
+        with os.fdopen(fd, 'w', encoding='utf-8') as f:
+            f.write(content)
+        os.replace(tmp_path, path)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.unlink(tmp_path)
+        raise
 
 
 def note_filename(arxiv_id: str, title_zh: str) -> str:
@@ -183,7 +197,22 @@ def render_obsidian_markdown(payload: Mapping[str, Any], *, created_date: str | 
     return '\n'.join(body_lines).rstrip() + '\n'
 
 
-def _find_existing_note(folder_path: str, clean_id: str) -> str | None:
+def _extract_arxiv_id_from_file(file_path: str) -> str | None:
+    try:
+        with open(file_path, encoding='utf-8') as f:
+            head = f.read(2048)
+    except OSError:
+        return None
+    fm_match = _FRONTMATTER_ARXIV_RE.search(head)
+    if fm_match:
+        return fm_match.group(1).strip() or None
+    body_match = _BODY_ARXIV_RE.search(head)
+    if body_match:
+        return body_match.group(1).strip() or None
+    return None
+
+
+def _find_existing_note(folder_path: str, clean_id: str, raw_id: str) -> str | None:
     prefix = f'[{clean_id}]'
     try:
         names = sorted(os.listdir(folder_path))
@@ -191,6 +220,12 @@ def _find_existing_note(folder_path: str, clean_id: str) -> str | None:
         return None
     for name in names:
         if name.startswith(prefix) and name.endswith('.md'):
+            return name
+    for name in names:
+        if not name.endswith('.md') or _SAVED_NOTE_RE.match(name):
+            continue
+        found_id = _extract_arxiv_id_from_file(os.path.join(folder_path, name))
+        if found_id and (found_id == raw_id or _sanitize_filename_part(found_id) == clean_id):
             return name
     return None
 
@@ -204,8 +239,9 @@ def save_obsidian_note(
 ) -> dict[str, str]:
     """Write or safely append a paper note inside the Obsidian vault folder.
 
-    If a ``[<arxiv_id>]*.md`` note already exists in ``folder_name``, its body
-    is never overwritten: an empty ``note`` leaves the file untouched
+    If a ``[<arxiv_id>]*.md`` note (or a renamed ``.md`` note containing
+    ``arxiv_id``) already exists in ``folder_name``, its body is never
+    overwritten: an empty ``note`` leaves the file untouched
     (``status='exists'``), whereas a non-empty ``note`` appends a personal-note
     section at the end (``status='appended'``).
 
@@ -227,44 +263,45 @@ def save_obsidian_note(
         raise ValueError('arxiv_id must not be empty')
 
     folder_path = os.path.join(vault_path, folder_name)
-    os.makedirs(folder_path, exist_ok=True)
     markdown = render_obsidian_markdown(payload, created_date=created_date)
 
-    existing_name = _find_existing_note(folder_path, clean_id)
-    if existing_name is not None:
-        existing_path = os.path.join(folder_path, existing_name)
-        note_text = str(payload.get('note') or '').strip()
-        if note_text:
-            with open(existing_path, encoding='utf-8') as f:
-                current = f.read().rstrip()
-            updated = f'{current}\n\n---\n\n**个人备注：** {note_text}\n'
-            _atomic_write_text(existing_path, updated)
+    with _lock:
+        os.makedirs(folder_path, exist_ok=True)
+        existing_name = _find_existing_note(folder_path, clean_id, raw_id)
+        if existing_name is not None:
+            existing_path = os.path.join(folder_path, existing_name)
+            note_text = str(payload.get('note') or '').strip()
+            if note_text:
+                with open(existing_path, encoding='utf-8') as f:
+                    current = f.read().rstrip()
+                updated = f'{current}\n\n---\n\n**个人备注：** {note_text}\n'
+                _atomic_write_text(existing_path, updated)
+                return {
+                    'status': 'appended',
+                    'filename': existing_name,
+                    'path': existing_path,
+                    'markdown': markdown,
+                }
             return {
-                'status': 'appended',
+                'status': 'exists',
                 'filename': existing_name,
                 'path': existing_path,
                 'markdown': markdown,
             }
+
+        filename = note_filename(clean_id, str(payload.get('title_zh') or ''))
+        target_path = os.path.join(folder_path, filename)
+        _atomic_write_text(target_path, markdown)
         return {
-            'status': 'exists',
-            'filename': existing_name,
-            'path': existing_path,
+            'status': 'created',
+            'filename': filename,
+            'path': target_path,
             'markdown': markdown,
         }
 
-    filename = note_filename(clean_id, str(payload.get('title_zh') or ''))
-    target_path = os.path.join(folder_path, filename)
-    _atomic_write_text(target_path, markdown)
-    return {
-        'status': 'created',
-        'filename': filename,
-        'path': target_path,
-        'markdown': markdown,
-    }
-
 
 def list_saved_arxiv_ids(vault_path: str, folder_name: str) -> list[str]:
-    """Return sorted arXiv IDs of all ``[<arxiv_id>]*.md`` files in the vault folder.
+    """Return sorted arXiv IDs of all saved ``.md`` notes in the vault folder.
 
     Args:
         vault_path: Root path of the local Obsidian vault.
@@ -280,9 +317,15 @@ def list_saved_arxiv_ids(vault_path: str, folder_name: str) -> list[str]:
         return []
     found: set[str] = set()
     for name in names:
+        if not name.endswith('.md'):
+            continue
         match = _SAVED_NOTE_RE.match(name)
         if match:
             arxiv_id = match.group(1).strip()
             if arxiv_id:
                 found.add(arxiv_id)
+            continue
+        fallback_id = _extract_arxiv_id_from_file(os.path.join(folder_path, name))
+        if fallback_id:
+            found.add(fallback_id)
     return sorted(found)
