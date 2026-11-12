@@ -25,5 +25,5 @@ OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '')
 OPENAI_MODEL = os.getenv('OPENAI_MODEL', 'gpt-5.5')
 CODEX_CLI = os.getenv('CODEX_CLI', '')
 
-CRAFT_SPACE_ID = os.getenv('CRAFT_SPACE_ID', '0157a916-ccf1-69d4-d6d4-42c851841de3')
-CRAFT_ARXIV_FOLDER_ID = os.getenv('CRAFT_ARXIV_FOLDER_ID', '56DADCF4-E1B0-4273-ADE1-A18766878AB5')
+OBSIDIAN_VAULT_PATH = os.getenv('OBSIDIAN_VAULT_PATH', '/Users/junyang/Documents/Obsidian/astro')
+OBSIDIAN_ARXIV_FOLDER = os.getenv('OBSIDIAN_ARXIV_FOLDER', 'Arxiv Notes')

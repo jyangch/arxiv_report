@@ -4,7 +4,8 @@ import datetime
 import os
 import re
 
-from core.config import CRAFT_ARXIV_FOLDER_ID, CRAFT_SPACE_ID
+CRAFT_SPACE_ID = ''
+CRAFT_ARXIV_FOLDER_ID = ''
 
 REPORTS_DIR = './reports'
 STARRED_REPORT = 'starred.html'
