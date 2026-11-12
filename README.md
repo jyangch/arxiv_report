@@ -11,8 +11,8 @@ Automatically fetches the latest papers from the arXiv `astro-ph.HE` (High Energ
 - Multi-provider LLM dispatch: Antigravity CLI (`agy`, Gemini Argon subscription) by default, with optional Claude (CLI or API) and OpenAI (Codex CLI or API) fallback
 - Self-contained styled HTML reports (light / dark adaptive, internal anchor scrolling)
 - FastAPI + HTMX web UI: per-date URLs, sidebar history, live SSE progress
-- Per-paper "Save to Craft" button: hands off a new Craft document (title, authors, method/results/caveats, optional personal note) via the `craftdocs://` URL scheme
-- Starred / Craft marks are saved server-side in `reports/paper_state.json`, so the Starred paper list survives cleared browser data
+- Per-paper "Save to Obsidian" button: writes a formatted Markdown note with YAML frontmatter (plus optional personal note) directly into the local Obsidian vault folder in the background
+- Starred / Obsidian marks are saved server-side in `reports/paper_state.json`, so the Starred paper list survives cleared browser data
 
 ## Project layout
 
@@ -22,7 +22,8 @@ Automatically fetches the latest papers from the arXiv `astro-ph.HE` (High Energ
 ├── report.py              CLI entry (cron / one-off)
 ├── core/                  domain package
 │   ├── fetcher.py           arXiv API + RSS fallback
-│   ├── paper_state.py       server-side starred / crafted store
+│   ├── obsidian.py          Obsidian Markdown + YAML renderer and safe vault writer
+│   ├── paper_state.py       server-side starred / Obsidian store
 │   ├── providers.py         Claude / Gemini / OpenAI clients + fallback dispatcher
 │   ├── prompt.py            prompt builder
 │   ├── pub_status.py        publication-status classifier
@@ -30,7 +31,7 @@ Automatically fetches the latest papers from the arXiv `astro-ph.HE` (High Energ
 │   └── config.py            env vars + defaults
 ├── templates/             Jinja2 base + partials for the web UI
 ├── static/style.css       sidebar + main chrome
-├── static/paper_state.js  syncs starred / crafted marks with the server
+├── static/paper_state.js  syncs starred / Obsidian marks and upgrades historical reports
 ├── tests/                 pytest suite (31 cases)
 └── reports/               generated daily reports (gitignored)
 ```
@@ -62,8 +63,8 @@ Set API keys, models, and provider backends via environment variables (all optio
 | `CLAUDE_BACKEND` | `cli` (consumes Max quota via Claude Code) or `api` (consumes API credits) | `cli` |
 | `CLAUDE_API_KEY` | Anthropic Claude API key -- only needed when `CLAUDE_BACKEND=api` | — |
 | `CLAUDE_MODEL` | Claude model name (API backend only) | `claude-opus-4-6` |
-| `CRAFT_SPACE_ID` | Craft space ID for the "Save to Craft" button target folder | maintainer's own space |
-| `CRAFT_ARXIV_FOLDER_ID` | Craft folder ID new saved documents are created in | maintainer's own "arxiv Notes" folder |
+| `OBSIDIAN_VAULT_PATH` | Local Obsidian vault root path for "Save to Obsidian" | `/Users/junyang/Documents/Obsidian/astro` |
+| `OBSIDIAN_ARXIV_FOLDER` | Subfolder inside the Obsidian vault where paper notes are written | `Arxiv Notes` |
 
 The Claude CLI backend always uses the `opus` model alias (hardcoded in `core/providers.py`). The preferred LLM provider can be set with `PREFERRED_PROVIDER` (`"gemini"`, `"claude"`, or `"openai"`). Defaults to `"gemini"`.
 
@@ -129,7 +130,7 @@ The HTML report contains two sections:
 
 - arXiv does not publish new submissions on weekends; running on Saturday or Sunday will return no results
 - On Mondays, the script automatically retrieves papers from the preceding Friday to account for the weekend gap
-- The "Save to Craft" button is client-side only and requires the Craft desktop app on macOS; it opens a native "open Craft?" confirmation the first time each browser session
+- The "Save to Obsidian" button writes `.md` notes via `/api/obsidian/save` into `OBSIDIAN_VAULT_PATH/OBSIDIAN_ARXIV_FOLDER` without overwriting existing note bodies or deleting files when unmarked
 
 ## License
 

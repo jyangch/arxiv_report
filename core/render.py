@@ -4,9 +4,6 @@ import datetime
 import os
 import re
 
-CRAFT_SPACE_ID = ''
-CRAFT_ARXIV_FOLDER_ID = ''
-
 REPORTS_DIR = './reports'
 STARRED_REPORT = 'starred.html'
 
@@ -45,9 +42,9 @@ def _write_starred_html(provider: str, as_of: datetime.datetime | None = None) -
     --highlight-bg: #fef7e3;
     --highlight-pill: #fde68a;
     --highlight-border: #f3d27a;
-    --craft-bg: #ecfeff;
-    --craft-fg: #0e7490;
-    --craft-border: #67e8f9;
+    --obsidian-bg: #f5f3ff;
+    --obsidian-fg: #6d28d9;
+    --obsidian-border: #c4b5fd;
     --accent: #2f855a;
     --accent-soft: #e3f2eb;
     --status-published-bg: #d1fae5;
@@ -72,9 +69,9 @@ def _write_starred_html(provider: str, as_of: datetime.datetime | None = None) -
         --highlight-bg: rgba(251, 191, 36, 0.08);
         --highlight-pill: rgba(251, 191, 36, 0.22);
         --highlight-border: rgba(251, 191, 36, 0.35);
-        --craft-bg: rgba(34, 211, 238, 0.14);
-        --craft-fg: #67e8f9;
-        --craft-border: rgba(103, 232, 249, 0.35);
+        --obsidian-bg: rgba(139, 92, 246, 0.16);
+        --obsidian-fg: #c4b5fd;
+        --obsidian-border: rgba(196, 181, 253, 0.35);
         --accent: #6ee7a3;
         --accent-soft: rgba(110, 231, 163, 0.14);
         --status-published-bg: rgba(110, 231, 163, 0.18);
@@ -264,6 +261,9 @@ h1 {{
     border-color: var(--highlight-border);
     box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.12);
 }}
+.paper-item.is-obsidian {{
+    border-color: color-mix(in srgb, var(--obsidian-border) 70%, var(--border));
+}}
 .paper-item:target,
 .paper-item.is-target {{
     border-color: var(--primary);
@@ -314,10 +314,10 @@ strong {{ color: var(--text); font-weight: 600; }}
     color: var(--highlight);
     border-color: var(--highlight-border);
 }}
-.craft-save-btn.is-active {{
-    background: var(--craft-bg);
-    color: var(--craft-fg);
-    border-color: var(--craft-border);
+.obsidian-save-btn.is-active {{
+    background: var(--obsidian-bg);
+    color: var(--obsidian-fg);
+    border-color: var(--obsidian-border);
 }}
 .paper-action-btn svg {{
     width: 17px;
@@ -399,11 +399,17 @@ strong {{ color: var(--text); font-weight: 600; }}
     <main id="list" class="paper-list"></main>
 </div>
 <script>
-const CRAFT_SPACE_ID = '{CRAFT_SPACE_ID}';
-const CRAFT_FOLDER_ID = '{CRAFT_ARXIV_FOLDER_ID}';
+const UNMARKED_PREFIX = 'arxiv-report-obsidian-unmarked:';
+
+function savedObsidianIds() {{
+    return Array.isArray(window.__OBSIDIAN_SAVED_IDS__)
+        ? new Set(window.__OBSIDIAN_SAVED_IDS__)
+        : new Set();
+}}
 
 function stateEntries(kind) {{
     const rows = [];
+    const savedIds = savedObsidianIds();
     for (let i = 0; i < localStorage.length; i += 1) {{
         const key = localStorage.key(i);
         if (!key || !key.startsWith('arxiv-report:') || !key.endsWith(':' + kind)) continue;
@@ -415,7 +421,11 @@ function stateEntries(kind) {{
             const data = JSON.parse(raw);
             data.stateBase = base;
             data.starred = localStorage.getItem(base + ':starred') === '1';
-            data.crafted = localStorage.getItem(base + ':crafted') === '1';
+            const id = String(data.arxivId || '').trim();
+            const unmarked = id && localStorage.getItem(UNMARKED_PREFIX + id) === '1';
+            data.obsidian = localStorage.getItem(base + ':obsidian') === '1'
+                || localStorage.getItem(base + ':crafted') === '1'
+                || (!unmarked && Boolean(id) && savedIds.has(id));
             rows.push(data);
         }} catch (_err) {{}}
     }}
@@ -513,39 +523,98 @@ function writeState(data, kind, value) {{
     }}
 }}
 
-function craftTitle(data) {{
-    return '[' + text(data.arxivId) + '] ' + text(data.titleZh);
+function localIsoDate() {{
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    return y + '-' + m + '-' + d;
 }}
 
-function craftContent(data, note, includeDocumentTitle) {{
-    let content = includeDocumentTitle ? '# ' + craftTitle(data) + '\\n\\n' : '';
-    content += '# ' + text(data.titleZh) + '\\n' + text(data.titleEn) + '\\n\\n';
-    content += '[arXiv:' + text(data.arxivId) + '](' + text(data.url) + ')\\n\\n';
-    content += '**作者：** ' + text(data.authors) + '\\n';
-    if (data.question) content += '\\n**研究问题：** ' + data.question;
-    if (data.method) content += '\\n**研究方法：** ' + data.method;
-    if (data.result) content += '\\n**研究结果：** ' + data.result;
-    if (data.caveat) content += '\\n**潜在不足与延伸方向：** ' + data.caveat;
-    if (note) content += '\\n\\n---\\n**个人备注：** ' + note;
-    return content;
+function yamlScalar(value, forceQuote) {{
+    const raw = String(value || '').trim();
+    const reserved = {{'true': 1, 'false': 1, 'null': 1, 'yes': 1, 'no': 1, 'on': 1, 'off': 1, '~': 1}};
+    if (!forceQuote && raw && !reserved[raw.toLowerCase()]) {{
+        if (/^\\d{{4}}-\\d{{2}}-\\d{{2}}$/.test(raw) || /^[A-Za-z0-9._\\u0080-\\uffff][A-Za-z0-9 ._\\u0080-\\uffff-]*$/.test(raw)) {{
+            return raw;
+        }}
+    }}
+    const escaped = raw
+        .replace(/\\\\/g, '\\\\\\\\')
+        .replace(/"/g, '\\\\"')
+        .replace(/\\n/g, '\\\\n')
+        .replace(/\\r/g, '\\\\r')
+        .replace(/\\t/g, '\\\\t');
+    return '"' + escaped + '"';
 }}
 
-function craftUrl(title, content) {{
-    const query = [
-        'spaceId=' + encodeURIComponent(CRAFT_SPACE_ID),
-        'folderId=' + encodeURIComponent(CRAFT_FOLDER_ID),
-        'title=' + encodeURIComponent(title),
-        'content=' + encodeURIComponent(content)
-    ].join('&');
-    return 'craftdocs://createdocument?' + query;
+function extractMethodParts(method, methodTag) {{
+    const rawMethod = String(method || '').trim();
+    const rawTag = String(methodTag || '').trim().replace(/^\\[|\\]$/g, '').trim();
+    const m = rawMethod.match(/^\\s*\\[([A-Za-z][A-Za-z0-9_-]*)\\]\\s*/);
+    if (m) {{
+        const extracted = m[1];
+        let rest = rawMethod.slice(m[0].length).trim();
+        const dup = rest.match(/^\\s*\\[([A-Za-z][A-Za-z0-9_-]*)\\]\\s*/);
+        if (dup && dup[1].toLowerCase() === extracted.toLowerCase()) {{
+            rest = rest.slice(dup[0].length).trim();
+        }}
+        const finalTag = rawTag || extracted;
+        return {{tag: finalTag, body: rest ? '[' + finalTag + '] ' + rest : '[' + finalTag + ']'}};
+    }}
+    if (rawTag && rawMethod) return {{tag: rawTag, body: '[' + rawTag + '] ' + rawMethod}};
+    return {{tag: rawTag, body: rawMethod}};
 }}
 
-function buildCraftUrl(data, note) {{
-    return craftUrl(craftTitle(data), craftContent(data, note, false));
-}}
+function buildObsidianMarkdown(data, note) {{
+    const arxivId = String(data.arxivId || '').trim();
+    const url = String(data.url || '').trim();
+    const titleZh = text(data.titleZh);
+    const titleEn = text(data.titleEn);
+    const authorsRaw = String(data.authors || '').trim();
+    const authors = authorsRaw ? authorsRaw.split(',').map(function(s) {{ return s.trim(); }}).filter(Boolean) : [];
+    const methodParts = extractMethodParts(data.method, data.methodTag);
+    const paperStatus = String(data.status || 'submitted').trim() || 'submitted';
+    const reportDate = String(data.reportDate || '').trim();
+    const noteText = String(note || '').trim();
 
-function buildCraftMarkdown(data, note) {{
-    return craftContent(data, note, true);
+    const yaml = [
+        '---',
+        'arxiv_id: ' + yamlScalar(arxivId, true),
+        'url: ' + yamlScalar(url, true)
+    ];
+    if (authors.length) {{
+        yaml.push('authors:');
+        authors.forEach(function(a) {{ yaml.push('  - ' + yamlScalar(a, false)); }});
+    }} else {{
+        yaml.push('authors: []');
+    }}
+    if (methodParts.tag) yaml.push('method: ' + yamlScalar(methodParts.tag, false));
+    yaml.push('paper_status: ' + yamlScalar(paperStatus, false));
+    if (reportDate) yaml.push('report_date: ' + yamlScalar(reportDate, false));
+    yaml.push('created: ' + yamlScalar(localIsoDate(), false));
+    yaml.push('---');
+
+    const lines = [
+        yaml.join('\\n'),
+        '',
+        '# ' + titleZh,
+        '',
+        titleEn,
+        '',
+        '[arXiv:' + (arxivId || '未记录') + '](' + url + ')',
+        '',
+        '**作者：** ' + (authorsRaw || '未记录'),
+        ''
+    ];
+    const analysis = [];
+    if (data.question) analysis.push('**研究问题：** ' + data.question);
+    if (methodParts.body) analysis.push('**研究方法：** ' + methodParts.body);
+    if (data.result) analysis.push('**研究结果：** ' + data.result);
+    if (data.caveat) analysis.push('**潜在不足与延伸方向：** ' + data.caveat);
+    if (analysis.length) lines.push(analysis.join('\\n'));
+    if (noteText) lines.push('', '---', '', '**个人备注：** ' + noteText);
+    return lines.join('\\n') + '\\n';
 }}
 
 function fallbackCopyText(value) {{
@@ -578,34 +647,61 @@ function copyText(value, btn, doneLabel) {{
     }}
 }}
 
-function copyTextSilently(value) {{
-    if (navigator.clipboard && window.isSecureContext) {{
-        return navigator.clipboard.writeText(value).catch(function() {{
-            fallbackCopyText(value);
-        }});
-    }}
-    fallbackCopyText(value);
-    return Promise.resolve();
-}}
-
 function toggleStarred(data) {{
     writeState(data, 'starred', '');
     render();
 }}
 
-function toggleCraft(data, btn) {{
-    if (data.crafted) {{
+function toggleObsidian(data, btn) {{
+    const id = String(data.arxivId || '').trim();
+    if (data.obsidian) {{
+        writeState(data, 'obsidian', '');
         writeState(data, 'crafted', '');
+        if (id) localStorage.setItem(UNMARKED_PREFIX + id, '1');
         render();
         return;
     }}
     const note = prompt('个人备注（可选）：');
     if (note === null) return;
-    writeState(data, 'crafted', '1');
-    copyTextSilently(buildCraftMarkdown(data, note)).finally(function() {{
-        window.top.location.href = buildCraftUrl(data, note);
+    fetch('/api/obsidian/save', {{
+        method: 'POST',
+        headers: {{'Content-Type': 'application/json'}},
+        body: JSON.stringify({{
+            arxiv_id: id,
+            url: data.url || '',
+            title_en: data.titleEn || '',
+            title_zh: data.titleZh || '',
+            authors: data.authors || '',
+            question: data.question || '',
+            method: data.method || '',
+            method_tag: data.methodTag || '',
+            result: data.result || '',
+            caveat: data.caveat || '',
+            paper_status: data.status || 'submitted',
+            report_date: data.reportDate || '',
+            note: note
+        }})
+    }}).then(function(resp) {{
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        return resp.json();
+    }}).then(function() {{
+        if (id) {{
+            localStorage.removeItem(UNMARKED_PREFIX + id);
+            if (Array.isArray(window.__OBSIDIAN_SAVED_IDS__) && window.__OBSIDIAN_SAVED_IDS__.indexOf(id) === -1) {{
+                window.__OBSIDIAN_SAVED_IDS__.push(id);
+            }}
+        }}
+        writeState(data, 'obsidian', '1');
+        data.obsidian = true;
+        btn.classList.add('is-active');
+        btn.title = 'Remove Obsidian mark';
+        btn.setAttribute('aria-label', btn.title);
+        btn.textContent = '✓';
+        setTimeout(function() {{ render(); }}, 900);
+    }}).catch(function(err) {{
+        console.error('Failed to save Obsidian note', err);
+        alert('Obsidian 保存失败：' + err.message);
     }});
-    btn.classList.add('is-active');
 }}
 
 function initStarredTools(rows) {{
@@ -692,7 +788,7 @@ function render(kind) {{
         const item = document.createElement('article');
         item.className = 'paper-item'
             + (data.starred ? ' is-starred' : '')
-            + (data.crafted ? ' is-crafted' : '');
+            + (data.obsidian ? ' is-obsidian' : '');
 
         const h3 = document.createElement('h3');
         const actions = document.createElement('span');
@@ -705,13 +801,13 @@ function render(kind) {{
         setButtonIcon(starBtn, 'star-filled');
         starBtn.addEventListener('click', function() {{ toggleStarred(data); }});
 
-        const craftBtn = document.createElement('button');
-        craftBtn.type = 'button';
-        craftBtn.className = 'paper-action-btn craft-save-btn' + (data.crafted ? ' is-active' : '');
-        craftBtn.title = data.crafted ? 'Remove Craft mark' : 'Save to Craft';
-        craftBtn.setAttribute('aria-label', craftBtn.title);
-        setButtonIcon(craftBtn, 'bookmark');
-        craftBtn.addEventListener('click', function() {{ toggleCraft(data, craftBtn); }});
+        const obsidianBtn = document.createElement('button');
+        obsidianBtn.type = 'button';
+        obsidianBtn.className = 'paper-action-btn obsidian-save-btn' + (data.obsidian ? ' is-active' : '');
+        obsidianBtn.title = data.obsidian ? 'Remove Obsidian mark' : 'Save to Obsidian';
+        obsidianBtn.setAttribute('aria-label', obsidianBtn.title);
+        setButtonIcon(obsidianBtn, 'bookmark');
+        obsidianBtn.addEventListener('click', function() {{ toggleObsidian(data, obsidianBtn); }});
 
         const copyBtn = document.createElement('button');
         copyBtn.type = 'button';
@@ -722,7 +818,7 @@ function render(kind) {{
         copyBtn.addEventListener('click', function() {{
             const note = prompt('个人备注（可选）：');
             if (note === null) return;
-            copyText(buildCraftMarkdown(data, note), copyBtn, '✓');
+            copyText(buildObsidianMarkdown(data, note), copyBtn, '✓');
         }});
 
         const jumpBtn = document.createElement('button');
@@ -736,7 +832,7 @@ function render(kind) {{
         }});
 
         actions.appendChild(starBtn);
-        actions.appendChild(craftBtn);
+        actions.appendChild(obsidianBtn);
         actions.appendChild(copyBtn);
         actions.appendChild(jumpBtn);
         h3.appendChild(actions);
@@ -830,9 +926,9 @@ def save_html(
     --status-accepted-fg: #1e40af;
     --status-submitted-bg: #f3f4f6;
     --status-submitted-fg: #4b5563;
-    --craft-bg: #ecfeff;
-    --craft-fg: #0e7490;
-    --craft-border: #67e8f9;
+    --obsidian-bg: #f5f3ff;
+    --obsidian-fg: #6d28d9;
+    --obsidian-border: #c4b5fd;
     --border: #e4e7eb;
     --link: #0b65c2;
     --shadow: 0 4px 16px rgba(31, 78, 140, 0.10);
@@ -866,9 +962,9 @@ def save_html(
         --status-accepted-fg: #5a9ee6;
         --status-submitted-bg: rgba(139, 149, 161, 0.18);
         --status-submitted-fg: #a1a8b0;
-        --craft-bg: rgba(34, 211, 238, 0.14);
-        --craft-fg: #67e8f9;
-        --craft-border: rgba(103, 232, 249, 0.35);
+        --obsidian-bg: rgba(139, 92, 246, 0.16);
+        --obsidian-fg: #c4b5fd;
+        --obsidian-border: rgba(196, 181, 253, 0.35);
         --border: #2a3138;
         --link: #79b8ff;
         --shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
@@ -1066,10 +1162,10 @@ code, .entry-id {{
     border-color: var(--highlight-border);
     opacity: 1;
 }}
-.mini-index a.is-crafted {{
-    background: var(--craft-bg);
-    color: var(--craft-fg);
-    border-color: var(--craft-border);
+.mini-index a.is-obsidian {{
+    background: var(--obsidian-bg);
+    color: var(--obsidian-fg);
+    border-color: var(--obsidian-border);
 }}
 .empty-filter {{
     display: none;
@@ -1192,18 +1288,18 @@ code, .entry-id {{
     color: var(--highlight);
     border-color: var(--highlight-border);
 }}
-.craft-save-btn.is-active {{
-    background: var(--craft-bg);
-    color: var(--craft-fg);
-    border-color: var(--craft-border);
+.obsidian-save-btn.is-active {{
+    background: var(--obsidian-bg);
+    color: var(--obsidian-fg);
+    border-color: var(--obsidian-border);
 }}
 .paper-item.is-hidden {{ display: none; }}
 .paper-item.is-starred {{
     border-color: var(--highlight-border);
     box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.12);
 }}
-.paper-item.is-crafted {{
-    border-color: color-mix(in srgb, var(--craft-border) 70%, var(--border));
+.paper-item.is-obsidian {{
+    border-color: color-mix(in srgb, var(--obsidian-border) 70%, var(--border));
 }}
 h3 {{
     color: var(--primary);
@@ -1321,15 +1417,14 @@ document.addEventListener('click', function(e) {{
 }});
 </script>
 <script>
-const CRAFT_SPACE_ID = '{CRAFT_SPACE_ID}';
-const CRAFT_FOLDER_ID = '{CRAFT_ARXIV_FOLDER_ID}';
 const REPORT_DATE = '{date_str}';
+const UNMARKED_PREFIX = 'arxiv-report-obsidian-unmarked:';
 
 function normalizeText(text) {{
     return (text || '').toLowerCase().replace(/\\s+/g, ' ').trim();
 }}
 
-function craftField(item, label) {{
+function paperField(item, label) {{
     const paras = item.querySelectorAll('p');
     for (const p of paras) {{
         const strong = p.querySelector('strong');
@@ -1370,23 +1465,26 @@ function paperMethod(item) {{
     return tag ? tag.textContent.trim().replace(/^\\[(.*)\\]$/, '$1') : '';
 }}
 
-function buildCraftData(item) {{
+function buildPaperData(item) {{
     const link = item.querySelector('h3 a');
     return {{
         url: link ? link.href : '',
         arxivId: link ? link.textContent.trim() : '',
-        titleEn: craftField(item, '英文标题：'),
-        titleZh: craftField(item, '中文标题：'),
-        authors: craftField(item, '作者：'),
-        question: craftField(item, '研究问题：'),
-        method: craftField(item, '研究方法：'),
-        result: craftField(item, '研究结果：'),
-        caveat: craftField(item, '潜在不足与延伸方向：')
+        titleEn: paperField(item, '英文标题：'),
+        titleZh: paperField(item, '中文标题：'),
+        authors: paperField(item, '作者：'),
+        question: paperField(item, '研究问题：'),
+        method: paperField(item, '研究方法：'),
+        methodTag: paperMethod(item),
+        result: paperField(item, '研究结果：'),
+        caveat: paperField(item, '潜在不足与延伸方向：'),
+        status: paperStatus(item),
+        reportDate: REPORT_DATE
     }};
 }}
 
 function paperIdentity(item) {{
-    const data = buildCraftData(item);
+    const data = buildPaperData(item);
     return data.arxivId || item.id || 'paper';
 }}
 
@@ -1399,7 +1497,7 @@ function paperStateKey(item, kind) {{
 }}
 
 function paperSnapshot(item) {{
-    const data = buildCraftData(item);
+    const data = buildPaperData(item);
     return Object.assign(data, {{
         reportDate: REPORT_DATE,
         reportHref: '/r/' + REPORT_DATE + '#' + item.id,
@@ -1453,13 +1551,41 @@ function setButtonIcon(btn, name) {{
     btn.innerHTML = iconSvg(name);
 }}
 
+function readRawStorage(key) {{
+    try {{
+        return window.localStorage.getItem(key) || '';
+    }} catch (_err) {{
+        return '';
+    }}
+}}
+
+function writeRawStorage(key, value) {{
+    try {{
+        if (value) {{
+            window.localStorage.setItem(key, value);
+        }} else {{
+            window.localStorage.removeItem(key);
+        }}
+    }} catch (_err) {{}}
+}}
+
+function isPaperObsidianSaved(item) {{
+    const id = paperIdentity(item);
+    if (readPaperState(item, 'obsidian') === '1' || readPaperState(item, 'crafted') === '1') {{
+        return true;
+    }}
+    if (!id || readRawStorage(UNMARKED_PREFIX + id) === '1') return false;
+    const savedIds = Array.isArray(window.__OBSIDIAN_SAVED_IDS__) ? window.__OBSIDIAN_SAVED_IDS__ : [];
+    return savedIds.indexOf(id) !== -1;
+}}
+
 function syncPaperState(item) {{
     const isStarred = readPaperState(item, 'starred') === '1';
-    const isCrafted = readPaperState(item, 'crafted') === '1';
+    const isObsidian = isPaperObsidianSaved(item);
     item.dataset.starred = isStarred ? 'starred' : '';
-    item.dataset.crafted = isCrafted ? 'crafted' : '';
+    item.dataset.obsidian = isObsidian ? 'obsidian' : '';
     item.classList.toggle('is-starred', isStarred);
-    item.classList.toggle('is-crafted', isCrafted);
+    item.classList.toggle('is-obsidian', isObsidian);
 
     const starBtn = item.querySelector('.star-toggle-btn');
     if (starBtn) {{
@@ -1468,16 +1594,16 @@ function syncPaperState(item) {{
         starBtn.title = isStarred ? 'Remove star' : 'Mark as starred';
         starBtn.setAttribute('aria-label', starBtn.title);
     }}
-    const craftBtn = item.querySelector('.craft-save-btn');
-    if (craftBtn) {{
-        craftBtn.classList.toggle('is-active', isCrafted);
-        craftBtn.title = isCrafted ? 'Remove Craft mark' : 'Save to Craft';
-        craftBtn.setAttribute('aria-label', craftBtn.title);
+    const obsidianBtn = item.querySelector('.obsidian-save-btn');
+    if (obsidianBtn) {{
+        obsidianBtn.classList.toggle('is-active', isObsidian);
+        obsidianBtn.title = isObsidian ? 'Remove Obsidian mark' : 'Save to Obsidian';
+        obsidianBtn.setAttribute('aria-label', obsidianBtn.title);
     }}
     const indexLink = document.querySelector('#paper-mini-index a[data-target-id="' + item.id + '"]');
     if (indexLink) {{
         indexLink.classList.toggle('is-starred', isStarred);
-        indexLink.classList.toggle('is-crafted', isCrafted);
+        indexLink.classList.toggle('is-obsidian', isObsidian);
     }}
 }}
 
@@ -1485,55 +1611,99 @@ function notifyPaperStateChanged() {{
     document.dispatchEvent(new CustomEvent('paper-state-change'));
 }}
 
-function craftUrl(title, content) {{
-    const query = [
-        'spaceId=' + encodeURIComponent(CRAFT_SPACE_ID),
-        'folderId=' + encodeURIComponent(CRAFT_FOLDER_ID),
-        'title=' + encodeURIComponent(title),
-        'content=' + encodeURIComponent(content)
-    ].join('&');
-    return 'craftdocs://createdocument?' + query;
+function localIsoDate() {{
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    return y + '-' + m + '-' + d;
 }}
 
-function craftTitle(data) {{
-    return '[' + data.arxivId + '] ' + data.titleZh;
-}}
-
-function craftContent(data, note, includeDocumentTitle) {{
-    let content = includeDocumentTitle ? '# ' + craftTitle(data) + '\\n\\n' : '';
-    content += '# ' + data.titleZh + '\\n' + data.titleEn + '\\n\\n';
-    content += '[arXiv:' + data.arxivId + '](' + data.url + ')\\n\\n';
-    content += '**作者：** ' + data.authors + '\\n';
-    if (data.question) content += '\\n**研究问题：** ' + data.question;
-    content += '\\n**研究方法：** ' + data.method;
-    content += '\\n**研究结果：** ' + data.result;
-    if (data.caveat) content += '\\n**潜在不足与延伸方向：** ' + data.caveat;
-    if (note) content += '\\n\\n---\\n**个人备注：** ' + note;
-    return content;
-}}
-
-function buildCraftUrl(item, note) {{
-    const data = buildCraftData(item);
-    return craftUrl(craftTitle(data), craftContent(data, note, false));
-}}
-
-function buildCraftMarkdown(item, note) {{
-    return craftContent(buildCraftData(item), note, true);
-}}
-
-function prepareCraftLink(item, e) {{
-    const note = prompt('个人备注（可选）：');
-    if (note === null) {{
-        e.preventDefault();
-        return '';
+function yamlScalar(value, forceQuote) {{
+    const raw = String(value || '').trim();
+    const reserved = {{'true': 1, 'false': 1, 'null': 1, 'yes': 1, 'no': 1, 'on': 1, 'off': 1, '~': 1}};
+    if (!forceQuote && raw && !reserved[raw.toLowerCase()]) {{
+        if (/^\\d{{4}}-\\d{{2}}-\\d{{2}}$/.test(raw) || /^[A-Za-z0-9._\\u0080-\\uffff][A-Za-z0-9 ._\\u0080-\\uffff-]*$/.test(raw)) {{
+            return raw;
+        }}
     }}
-    try {{
-        return buildCraftUrl(item, note);
-    }} catch (err) {{
-        console.error('Failed to build Craft URL', err);
-        alert('Craft URL 生成失败：' + err.message);
-        return '';
+    const escaped = raw
+        .replace(/\\\\/g, '\\\\\\\\')
+        .replace(/"/g, '\\\\"')
+        .replace(/\\n/g, '\\\\n')
+        .replace(/\\r/g, '\\\\r')
+        .replace(/\\t/g, '\\\\t');
+    return '"' + escaped + '"';
+}}
+
+function extractMethodParts(method, methodTag) {{
+    const rawMethod = String(method || '').trim();
+    const rawTag = String(methodTag || '').trim().replace(/^\\[|\\]$/g, '').trim();
+    const m = rawMethod.match(/^\\s*\\[([A-Za-z][A-Za-z0-9_-]*)\\]\\s*/);
+    if (m) {{
+        const extracted = m[1];
+        let rest = rawMethod.slice(m[0].length).trim();
+        const dup = rest.match(/^\\s*\\[([A-Za-z][A-Za-z0-9_-]*)\\]\\s*/);
+        if (dup && dup[1].toLowerCase() === extracted.toLowerCase()) {{
+            rest = rest.slice(dup[0].length).trim();
+        }}
+        const finalTag = rawTag || extracted;
+        return {{tag: finalTag, body: rest ? '[' + finalTag + '] ' + rest : '[' + finalTag + ']'}};
     }}
+    if (rawTag && rawMethod) return {{tag: rawTag, body: '[' + rawTag + '] ' + rawMethod}};
+    return {{tag: rawTag, body: rawMethod}};
+}}
+
+function buildObsidianMarkdown(item, note) {{
+    const data = buildPaperData(item);
+    const arxivId = String(data.arxivId || '').trim();
+    const url = String(data.url || '').trim();
+    const titleZh = String(data.titleZh || '').trim() || '未记录';
+    const titleEn = String(data.titleEn || '').trim() || '未记录';
+    const authorsRaw = String(data.authors || '').trim();
+    const authors = authorsRaw ? authorsRaw.split(',').map(function(s) {{ return s.trim(); }}).filter(Boolean) : [];
+    const methodParts = extractMethodParts(data.method, data.methodTag);
+    const paperStatusStr = String(data.status || 'submitted').trim() || 'submitted';
+    const reportDate = String(data.reportDate || '').trim();
+    const noteText = String(note || '').trim();
+
+    const yaml = [
+        '---',
+        'arxiv_id: ' + yamlScalar(arxivId, true),
+        'url: ' + yamlScalar(url, true)
+    ];
+    if (authors.length) {{
+        yaml.push('authors:');
+        authors.forEach(function(a) {{ yaml.push('  - ' + yamlScalar(a, false)); }});
+    }} else {{
+        yaml.push('authors: []');
+    }}
+    if (methodParts.tag) yaml.push('method: ' + yamlScalar(methodParts.tag, false));
+    yaml.push('paper_status: ' + yamlScalar(paperStatusStr, false));
+    if (reportDate) yaml.push('report_date: ' + yamlScalar(reportDate, false));
+    yaml.push('created: ' + yamlScalar(localIsoDate(), false));
+    yaml.push('---');
+
+    const lines = [
+        yaml.join('\\n'),
+        '',
+        '# ' + titleZh,
+        '',
+        titleEn,
+        '',
+        '[arXiv:' + (arxivId || '未记录') + '](' + url + ')',
+        '',
+        '**作者：** ' + (authorsRaw || '未记录'),
+        ''
+    ];
+    const analysis = [];
+    if (data.question) analysis.push('**研究问题：** ' + data.question);
+    if (methodParts.body) analysis.push('**研究方法：** ' + methodParts.body);
+    if (data.result) analysis.push('**研究结果：** ' + data.result);
+    if (data.caveat) analysis.push('**潜在不足与延伸方向：** ' + data.caveat);
+    if (analysis.length) lines.push(analysis.join('\\n'));
+    if (noteText) lines.push('', '---', '', '**个人备注：** ' + noteText);
+    return lines.join('\\n') + '\\n';
 }}
 
 function fallbackCopyText(text) {{
@@ -1566,49 +1736,67 @@ function copyText(text, btn, doneLabel) {{
     }}
 }}
 
-function copyTextSilently(text) {{
-    if (navigator.clipboard && window.isSecureContext) {{
-        return navigator.clipboard.writeText(text).catch(function() {{
-            fallbackCopyText(text);
-        }});
-    }}
-    fallbackCopyText(text);
-    return Promise.resolve();
-}}
-
 function askNote() {{
     return prompt('个人备注（可选）：');
 }}
 
-function openCraftWithClipboardFallback(item, btn, e) {{
-    if (readPaperState(item, 'crafted') === '1') {{
-        e.preventDefault();
+function toggleObsidianSave(item, btn, e) {{
+    e.preventDefault();
+    const data = buildPaperData(item);
+    const id = String(data.arxivId || '').trim();
+    if (isPaperObsidianSaved(item)) {{
+        writePaperState(item, 'obsidian', '');
         writePaperState(item, 'crafted', '');
+        if (id) writeRawStorage(UNMARKED_PREFIX + id, '1');
         writePaperSnapshot(item);
         syncPaperState(item);
         notifyPaperStateChanged();
         return;
     }}
     const note = askNote();
-    if (note === null) {{
-        e.preventDefault();
-        return;
-    }}
-    const url = buildCraftUrl(item, note);
-    const markdown = buildCraftMarkdown(item, note);
-    writePaperState(item, 'crafted', '1');
-    writePaperSnapshot(item);
-    syncPaperState(item);
-    notifyPaperStateChanged();
-    copyTextSilently(markdown).then(function() {{
+    if (note === null) return;
+    fetch('/api/obsidian/save', {{
+        method: 'POST',
+        headers: {{'Content-Type': 'application/json'}},
+        body: JSON.stringify({{
+            arxiv_id: id,
+            url: data.url || '',
+            title_en: data.titleEn || '',
+            title_zh: data.titleZh || '',
+            authors: data.authors || '',
+            question: data.question || '',
+            method: data.method || '',
+            method_tag: data.methodTag || '',
+            result: data.result || '',
+            caveat: data.caveat || '',
+            paper_status: data.status || 'submitted',
+            report_date: data.reportDate || '',
+            note: note
+        }})
+    }}).then(function(resp) {{
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        return resp.json();
+    }}).then(function() {{
+        if (id) {{
+            writeRawStorage(UNMARKED_PREFIX + id, '');
+            if (Array.isArray(window.__OBSIDIAN_SAVED_IDS__) && window.__OBSIDIAN_SAVED_IDS__.indexOf(id) === -1) {{
+                window.__OBSIDIAN_SAVED_IDS__.push(id);
+            }}
+        }}
+        writePaperState(item, 'obsidian', '1');
+        writePaperSnapshot(item);
+        syncPaperState(item);
+        notifyPaperStateChanged();
         btn.textContent = '✓';
-        btn.title = 'Requested Craft save; Markdown copied';
-    }}).catch(function() {{
-        btn.textContent = '!';
-        btn.title = 'Requested Craft save; Markdown copy failed';
+        btn.title = 'Saved to Obsidian';
+        setTimeout(function() {{
+            setButtonIcon(btn, 'bookmark');
+            syncPaperState(item);
+        }}, 1600);
+    }}).catch(function(err) {{
+        console.error('Failed to save Obsidian note', err);
+        alert('Obsidian 保存失败：' + err.message);
     }});
-    window.top.location.href = url;
-    setTimeout(function() {{ setButtonIcon(btn, 'bookmark'); syncPaperState(item); }}, 3200);
 }}
 
 function initPaperStateActions() {{
@@ -1633,18 +1821,12 @@ document.querySelectorAll('.paper-item').forEach(function(item) {{
 
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = 'paper-action-btn craft-save-btn';
+    btn.className = 'paper-action-btn obsidian-save-btn';
     setButtonIcon(btn, 'bookmark');
-    btn.title = 'Save to Craft';
-    btn.setAttribute('aria-label', 'Save to Craft');
+    btn.title = 'Save to Obsidian';
+    btn.setAttribute('aria-label', 'Save to Obsidian');
     btn.addEventListener('click', function(e) {{
-        try {{
-            openCraftWithClipboardFallback(item, btn, e);
-        }} catch (err) {{
-            e.preventDefault();
-            console.error('Failed to prepare Craft save', err);
-            alert('Craft 收藏准备失败：' + err.message);
-        }}
+        toggleObsidianSave(item, btn, e);
     }});
 
     const copyMd = document.createElement('button');
@@ -1656,7 +1838,7 @@ document.querySelectorAll('.paper-item').forEach(function(item) {{
     copyMd.addEventListener('click', function() {{
         const note = askNote();
         if (note === null) return;
-        copyText(buildCraftMarkdown(item, note), copyMd, '✓');
+        copyText(buildObsidianMarkdown(item, note), copyMd, '✓');
     }});
 
     actions.appendChild(starBtn);
