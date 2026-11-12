@@ -211,33 +211,6 @@
         if (indexLink) indexLink.classList.toggle('is-crafted', saved);
     }
 
-    function localIsoDate() {
-        var now = new Date();
-        var y = now.getFullYear();
-        var m = String(now.getMonth() + 1).padStart(2, '0');
-        var d = String(now.getDate()).padStart(2, '0');
-        return y + '-' + m + '-' + d;
-    }
-
-    function yamlScalar(value, forceQuote) {
-        var raw = String(value || '')
-            .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f\u0085\u2028\u2029]+/g, ' ')
-            .trim();
-        var reserved = {'true': 1, 'false': 1, 'null': 1, 'yes': 1, 'no': 1, 'on': 1, 'off': 1, '~': 1};
-        if (!forceQuote && raw && !reserved[raw.toLowerCase()]) {
-            if (/^\d{4}-\d{2}-\d{2}$/.test(raw) || /^[A-Za-z_\u0080-\uffff][A-Za-z0-9 ._\u0080-\uffff-]*$/.test(raw)) {
-                return raw;
-            }
-        }
-        var escaped = raw
-            .replace(/\\/g, '\\\\')
-            .replace(/"/g, '\\"')
-            .replace(/\n/g, '\\n')
-            .replace(/\r/g, '\\r')
-            .replace(/\t/g, '\\t');
-        return '"' + escaped + '"';
-    }
-
     function extractMethodParts(method, methodTag) {
         var rawMethod = String(method || '').trim();
         var rawTag = String(methodTag || '').trim().replace(/^\[|\]$/g, '').trim();
@@ -262,32 +235,10 @@
         var titleZh = String(data.titleZh || '').trim() || '未记录';
         var titleEn = String(data.titleEn || '').trim() || '未记录';
         var authorsRaw = String(data.authors || '').trim();
-        var authors = authorsRaw ? authorsRaw.split(',').map(function(s) { return s.trim(); }).filter(Boolean) : [];
         var methodParts = extractMethodParts(data.method, data.methodTag);
-        var paperStatus = String(data.status || 'submitted').trim() || 'submitted';
-        var reportDate = String(data.reportDate || '').trim();
         var noteText = String(note || '').trim();
 
-        var yaml = [
-            '---',
-            'arxiv_id: ' + yamlScalar(arxivId, true),
-            'url: ' + yamlScalar(url, true)
-        ];
-        if (authors.length) {
-            yaml.push('authors:');
-            authors.forEach(function(a) { yaml.push('  - ' + yamlScalar(a, false)); });
-        } else {
-            yaml.push('authors: []');
-        }
-        if (methodParts.tag) yaml.push('method: ' + yamlScalar(methodParts.tag, false));
-        yaml.push('paper_status: ' + yamlScalar(paperStatus, false));
-        if (reportDate) yaml.push('report_date: ' + yamlScalar(reportDate, false));
-        yaml.push('created: ' + yamlScalar(localIsoDate(), false));
-        yaml.push('---');
-
         var lines = [
-            yaml.join('\n'),
-            '',
             '# ' + titleZh,
             '',
             titleEn,

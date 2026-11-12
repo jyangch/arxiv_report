@@ -7,7 +7,6 @@ are never overwritten; an optional personal note is appended instead.
 
 from collections.abc import Mapping
 import contextlib
-import datetime
 import os
 import re
 import tempfile
@@ -15,15 +14,11 @@ import threading
 from typing import Any
 
 _CONTROL_CHARS_RE = re.compile(r'[\x00-\x1f\x7f]+')
-_YAML_LINE_BREAK_CTRL_RE = re.compile(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f\u0085\u2028\u2029]+')
 _WHITESPACE_RE = re.compile(r'\s+')
 _LEADING_METHOD_TAG_RE = re.compile(r'^\s*\[([A-Za-z][A-Za-z0-9_-]*)\]\s*')
-_PLAIN_YAML_SCALAR_RE = re.compile(r'^[A-Za-z_\u0080-\uffff][A-Za-z0-9 ._\u0080-\uffff-]*$')
-_ISO_DATE_RE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
 _SAVED_NOTE_RE = re.compile(r'^\[([^\]]+)\].*\.md$')
 _FRONTMATTER_ARXIV_RE = re.compile(r'(?m)^arxiv_id:\s*"?([^"\s]+)"?\s*$')
 _BODY_ARXIV_RE = re.compile(r'\[arXiv:([^\]\s]+)\]')
-_YAML_RESERVED = frozenset({'true', 'false', 'null', 'yes', 'no', 'on', 'off', '~'})
 _MAX_FILENAME_BYTES = 255
 _lock = threading.Lock()
 
@@ -33,29 +28,6 @@ def _sanitize_filename_part(value: str) -> str:
     cleaned = cleaned.replace('/', '／').replace('\\', '＼').replace(':', '：')
     cleaned = _WHITESPACE_RE.sub(' ', cleaned).strip().rstrip('.')
     return cleaned
-
-
-def _yaml_scalar(value: str, *, force_quote: bool = False) -> str:
-    text = _YAML_LINE_BREAK_CTRL_RE.sub(' ', value or '')
-    text = text.strip()
-    if (
-        not force_quote
-        and text
-        and text.lower() not in _YAML_RESERVED
-        and (
-            _ISO_DATE_RE.match(text)
-            or (_PLAIN_YAML_SCALAR_RE.match(text) and not text.endswith(' '))
-        )
-    ):
-        return text
-    escaped = (
-        text.replace('\\', '\\\\')
-        .replace('"', '\\"')
-        .replace('\n', '\\n')
-        .replace('\r', '\\r')
-        .replace('\t', '\\t')
-    )
-    return f'"{escaped}"'
 
 
 def _extract_method_parts(method: str, method_tag: str) -> tuple[str, str]:
@@ -84,6 +56,7 @@ def _atomic_write_text(path: str, content: str) -> None:
     try:
         with os.fdopen(fd, 'w', encoding='utf-8') as f:
             f.write(content)
+        os.chmod(tmp_path, 0o644)
         os.replace(tmp_path, path)
     except BaseException:
         with contextlib.suppress(OSError):
@@ -119,12 +92,11 @@ def note_filename(arxiv_id: str, title_zh: str) -> str:
     return f'{prefix}{clean_title}{suffix}'
 
 
-def render_obsidian_markdown(payload: Mapping[str, Any], *, created_date: str | None = None) -> str:
-    """Render YAML frontmatter and Markdown body for an Obsidian paper note.
+def render_obsidian_markdown(payload: Mapping[str, Any]) -> str:
+    """Render clean Markdown body for an Obsidian paper note.
 
     Args:
         payload: Mapping of scraped paper metadata and optional personal ``note``.
-        created_date: Optional ``YYYY-MM-DD`` override for deterministic testing.
 
     Returns:
         Complete UTF-8 Markdown document text terminated with a newline.
@@ -139,36 +111,11 @@ def render_obsidian_markdown(payload: Mapping[str, Any], *, created_date: str | 
     method_tag_raw = str(payload.get('method_tag') or '').strip()
     result = str(payload.get('result') or '').strip()
     caveat = str(payload.get('caveat') or '').strip()
-    paper_status = str(payload.get('paper_status') or '').strip() or 'submitted'
-    report_date = str(payload.get('report_date') or '').strip()
     note = str(payload.get('note') or '').strip()
-    created = (created_date or datetime.date.today().isoformat()).strip()
 
-    method_tag, method_body = _extract_method_parts(method_raw, method_tag_raw)
-    author_items = [item.strip() for item in authors_raw.split(',') if item.strip()]
-
-    yaml_lines = [
-        '---',
-        f'arxiv_id: {_yaml_scalar(arxiv_id, force_quote=True)}',
-        f'url: {_yaml_scalar(url, force_quote=True)}',
-    ]
-    if author_items:
-        yaml_lines.append('authors:')
-        for author in author_items:
-            yaml_lines.append(f'  - {_yaml_scalar(author)}')
-    else:
-        yaml_lines.append('authors: []')
-    if method_tag:
-        yaml_lines.append(f'method: {_yaml_scalar(method_tag)}')
-    yaml_lines.append(f'paper_status: {_yaml_scalar(paper_status)}')
-    if report_date:
-        yaml_lines.append(f'report_date: {_yaml_scalar(report_date)}')
-    yaml_lines.append(f'created: {_yaml_scalar(created)}')
-    yaml_lines.append('---')
+    _, method_body = _extract_method_parts(method_raw, method_tag_raw)
 
     body_lines = [
-        '\n'.join(yaml_lines),
-        '',
         f'# {title_zh}',
         '',
         title_en,
@@ -235,7 +182,6 @@ def save_obsidian_note(
     *,
     vault_path: str,
     folder_name: str,
-    created_date: str | None = None,
 ) -> dict[str, str]:
     """Write or safely append a paper note inside the Obsidian vault folder.
 
@@ -249,7 +195,6 @@ def save_obsidian_note(
         payload: Paper metadata mapping including ``arxiv_id`` and ``title_zh``.
         vault_path: Root path of the local Obsidian vault.
         folder_name: Subfolder inside ``vault_path`` where arXiv notes live.
-        created_date: Optional ``YYYY-MM-DD`` override for the ``created`` field.
 
     Returns:
         Dictionary with ``status``, ``filename``, ``path``, and ``markdown``.
@@ -263,7 +208,7 @@ def save_obsidian_note(
         raise ValueError('arxiv_id must not be empty')
 
     folder_path = os.path.join(vault_path, folder_name)
-    markdown = render_obsidian_markdown(payload, created_date=created_date)
+    markdown = render_obsidian_markdown(payload)
 
     with _lock:
         os.makedirs(folder_path, exist_ok=True)

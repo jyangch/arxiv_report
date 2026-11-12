@@ -523,33 +523,6 @@ function writeState(data, kind, value) {{
     }}
 }}
 
-function localIsoDate() {{
-    const now = new Date();
-    const y = now.getFullYear();
-    const m = String(now.getMonth() + 1).padStart(2, '0');
-    const d = String(now.getDate()).padStart(2, '0');
-    return y + '-' + m + '-' + d;
-}}
-
-function yamlScalar(value, forceQuote) {{
-    const raw = String(value || '')
-        .replace(/[\\x00-\\x08\\x0b\\x0c\\x0e-\\x1f\\x7f\\u0085\\u2028\\u2029]+/g, ' ')
-        .trim();
-    const reserved = {{'true': 1, 'false': 1, 'null': 1, 'yes': 1, 'no': 1, 'on': 1, 'off': 1, '~': 1}};
-    if (!forceQuote && raw && !reserved[raw.toLowerCase()]) {{
-        if (/^\\d{{4}}-\\d{{2}}-\\d{{2}}$/.test(raw) || /^[A-Za-z_\\u0080-\\uffff][A-Za-z0-9 ._\\u0080-\\uffff-]*$/.test(raw)) {{
-            return raw;
-        }}
-    }}
-    const escaped = raw
-        .replace(/\\\\/g, '\\\\\\\\')
-        .replace(/"/g, '\\\\"')
-        .replace(/\\n/g, '\\\\n')
-        .replace(/\\r/g, '\\\\r')
-        .replace(/\\t/g, '\\\\t');
-    return '"' + escaped + '"';
-}}
-
 function extractMethodParts(method, methodTag) {{
     const rawMethod = String(method || '').trim();
     const rawTag = String(methodTag || '').trim().replace(/^\\[|\\]$/g, '').trim();
@@ -574,32 +547,10 @@ function buildObsidianMarkdown(data, note) {{
     const titleZh = text(data.titleZh);
     const titleEn = text(data.titleEn);
     const authorsRaw = String(data.authors || '').trim();
-    const authors = authorsRaw ? authorsRaw.split(',').map(function(s) {{ return s.trim(); }}).filter(Boolean) : [];
     const methodParts = extractMethodParts(data.method, data.methodTag);
-    const paperStatus = String(data.status || 'submitted').trim() || 'submitted';
-    const reportDate = String(data.reportDate || '').trim();
     const noteText = String(note || '').trim();
 
-    const yaml = [
-        '---',
-        'arxiv_id: ' + yamlScalar(arxivId, true),
-        'url: ' + yamlScalar(url, true)
-    ];
-    if (authors.length) {{
-        yaml.push('authors:');
-        authors.forEach(function(a) {{ yaml.push('  - ' + yamlScalar(a, false)); }});
-    }} else {{
-        yaml.push('authors: []');
-    }}
-    if (methodParts.tag) yaml.push('method: ' + yamlScalar(methodParts.tag, false));
-    yaml.push('paper_status: ' + yamlScalar(paperStatus, false));
-    if (reportDate) yaml.push('report_date: ' + yamlScalar(reportDate, false));
-    yaml.push('created: ' + yamlScalar(localIsoDate(), false));
-    yaml.push('---');
-
     const lines = [
-        yaml.join('\\n'),
-        '',
         '# ' + titleZh,
         '',
         titleEn,
@@ -1613,33 +1564,6 @@ function notifyPaperStateChanged() {{
     document.dispatchEvent(new CustomEvent('paper-state-change'));
 }}
 
-function localIsoDate() {{
-    const now = new Date();
-    const y = now.getFullYear();
-    const m = String(now.getMonth() + 1).padStart(2, '0');
-    const d = String(now.getDate()).padStart(2, '0');
-    return y + '-' + m + '-' + d;
-}}
-
-function yamlScalar(value, forceQuote) {{
-    const raw = String(value || '')
-        .replace(/[\\x00-\\x08\\x0b\\x0c\\x0e-\\x1f\\x7f\\u0085\\u2028\\u2029]+/g, ' ')
-        .trim();
-    const reserved = {{'true': 1, 'false': 1, 'null': 1, 'yes': 1, 'no': 1, 'on': 1, 'off': 1, '~': 1}};
-    if (!forceQuote && raw && !reserved[raw.toLowerCase()]) {{
-        if (/^\\d{{4}}-\\d{{2}}-\\d{{2}}$/.test(raw) || /^[A-Za-z_\\u0080-\\uffff][A-Za-z0-9 ._\\u0080-\\uffff-]*$/.test(raw)) {{
-            return raw;
-        }}
-    }}
-    const escaped = raw
-        .replace(/\\\\/g, '\\\\\\\\')
-        .replace(/"/g, '\\\\"')
-        .replace(/\\n/g, '\\\\n')
-        .replace(/\\r/g, '\\\\r')
-        .replace(/\\t/g, '\\\\t');
-    return '"' + escaped + '"';
-}}
-
 function extractMethodParts(method, methodTag) {{
     const rawMethod = String(method || '').trim();
     const rawTag = String(methodTag || '').trim().replace(/^\\[|\\]$/g, '').trim();
@@ -1665,32 +1589,10 @@ function buildObsidianMarkdown(item, note) {{
     const titleZh = String(data.titleZh || '').trim() || '未记录';
     const titleEn = String(data.titleEn || '').trim() || '未记录';
     const authorsRaw = String(data.authors || '').trim();
-    const authors = authorsRaw ? authorsRaw.split(',').map(function(s) {{ return s.trim(); }}).filter(Boolean) : [];
     const methodParts = extractMethodParts(data.method, data.methodTag);
-    const paperStatusStr = String(data.status || 'submitted').trim() || 'submitted';
-    const reportDate = String(data.reportDate || '').trim();
     const noteText = String(note || '').trim();
 
-    const yaml = [
-        '---',
-        'arxiv_id: ' + yamlScalar(arxivId, true),
-        'url: ' + yamlScalar(url, true)
-    ];
-    if (authors.length) {{
-        yaml.push('authors:');
-        authors.forEach(function(a) {{ yaml.push('  - ' + yamlScalar(a, false)); }});
-    }} else {{
-        yaml.push('authors: []');
-    }}
-    if (methodParts.tag) yaml.push('method: ' + yamlScalar(methodParts.tag, false));
-    yaml.push('paper_status: ' + yamlScalar(paperStatusStr, false));
-    if (reportDate) yaml.push('report_date: ' + yamlScalar(reportDate, false));
-    yaml.push('created: ' + yamlScalar(localIsoDate(), false));
-    yaml.push('---');
-
     const lines = [
-        yaml.join('\\n'),
-        '',
         '# ' + titleZh,
         '',
         titleEn,

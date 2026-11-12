@@ -11,7 +11,7 @@ Automatically fetches the latest papers from the arXiv `astro-ph.HE` (High Energ
 - Multi-provider LLM dispatch: Antigravity CLI (`agy`, Gemini Argon subscription) by default, with optional Claude (CLI or API) and OpenAI (Codex CLI or API) fallback
 - Self-contained styled HTML reports (light / dark adaptive, internal anchor scrolling)
 - FastAPI + HTMX web UI: per-date URLs, sidebar history, live SSE progress
-- Per-paper "Save to Obsidian" button: writes a formatted Markdown note with YAML frontmatter (plus optional personal note) directly into the local Obsidian vault folder in the background
+- Per-paper "Save to Obsidian" button: writes a formatted Markdown note (plus optional personal note) directly into the local Obsidian vault folder in the background
 - Starred / Obsidian marks are saved server-side in `reports/paper_state.json`, so the Starred paper list survives cleared browser data
 
 ## Project layout
@@ -22,7 +22,7 @@ Automatically fetches the latest papers from the arXiv `astro-ph.HE` (High Energ
 ├── report.py              CLI entry (cron / one-off)
 ├── core/                  domain package
 │   ├── fetcher.py           arXiv API + RSS fallback
-│   ├── obsidian.py          Obsidian Markdown + YAML renderer and safe vault writer
+│   ├── obsidian.py          Obsidian Markdown renderer and safe vault writer
 │   ├── paper_state.py       server-side starred / Obsidian store
 │   ├── providers.py         Claude / Gemini / OpenAI clients + fallback dispatcher
 │   ├── prompt.py            prompt builder
