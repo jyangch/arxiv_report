@@ -103,7 +103,6 @@ def render_obsidian_markdown(payload: Mapping[str, Any]) -> str:
     """
     arxiv_id = str(payload.get('arxiv_id') or '').strip()
     url = str(payload.get('url') or '').strip()
-    title_zh = str(payload.get('title_zh') or '').strip() or '未记录'
     title_en = str(payload.get('title_en') or '').strip() or '未记录'
     authors_raw = str(payload.get('authors') or '').strip()
     question = str(payload.get('question') or '').strip()
@@ -116,8 +115,6 @@ def render_obsidian_markdown(payload: Mapping[str, Any]) -> str:
     _, method_body = _extract_method_parts(method_raw, method_tag_raw)
 
     body_lines = [
-        f'# {title_zh}',
-        '',
         title_en,
         '',
         f'[arXiv:{arxiv_id or "未记录"}]({url})',

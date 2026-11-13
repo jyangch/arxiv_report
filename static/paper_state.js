@@ -232,15 +232,12 @@
     function formatObsidianMarkdown(data, note) {
         var arxivId = String(data.arxivId || '').trim();
         var url = String(data.url || '').trim();
-        var titleZh = String(data.titleZh || '').trim() || '未记录';
         var titleEn = String(data.titleEn || '').trim() || '未记录';
         var authorsRaw = String(data.authors || '').trim();
         var methodParts = extractMethodParts(data.method, data.methodTag);
         var noteText = String(note || '').trim();
 
         var lines = [
-            '# ' + titleZh,
-            '',
             titleEn,
             '',
             '[arXiv:' + (arxivId || '未记录') + '](' + url + ')',

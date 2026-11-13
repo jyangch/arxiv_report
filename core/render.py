@@ -544,15 +544,12 @@ function extractMethodParts(method, methodTag) {{
 function buildObsidianMarkdown(data, note) {{
     const arxivId = String(data.arxivId || '').trim();
     const url = String(data.url || '').trim();
-    const titleZh = text(data.titleZh);
     const titleEn = text(data.titleEn);
     const authorsRaw = String(data.authors || '').trim();
     const methodParts = extractMethodParts(data.method, data.methodTag);
     const noteText = String(note || '').trim();
 
     const lines = [
-        '# ' + titleZh,
-        '',
         titleEn,
         '',
         '[arXiv:' + (arxivId || '未记录') + '](' + url + ')',
@@ -1586,15 +1583,12 @@ function buildObsidianMarkdown(item, note) {{
     const data = buildPaperData(item);
     const arxivId = String(data.arxivId || '').trim();
     const url = String(data.url || '').trim();
-    const titleZh = String(data.titleZh || '').trim() || '未记录';
     const titleEn = String(data.titleEn || '').trim() || '未记录';
     const authorsRaw = String(data.authors || '').trim();
     const methodParts = extractMethodParts(data.method, data.methodTag);
     const noteText = String(note || '').trim();
 
     const lines = [
-        '# ' + titleZh,
-        '',
         titleEn,
         '',
         '[arXiv:' + (arxivId || '未记录') + '](' + url + ')',
