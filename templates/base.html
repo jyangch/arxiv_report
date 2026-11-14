@@ -3,71 +3,441 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>{% block title %}arXiv astro-ph.HE Daily Report{% endblock %}</title>
+  <title>{% block title %}{% if page_title %}{{ page_title }} · {% endif %}arXiv astro-ph.HE Digest{% endblock %}</title>
+  <script>
+    (function() {
+      try {
+        var lang = localStorage.getItem('arxiv-report:lang');
+        document.documentElement.dataset.lang = lang === 'en' ? 'en' : 'zh';
+      } catch (_e) {
+        document.documentElement.dataset.lang = 'zh';
+      }
+      try {
+        var t = localStorage.getItem('arxiv-report:theme');
+        if (t === 'light' || t === 'dark') {
+          document.documentElement.dataset.theme = t;
+          return;
+        }
+      } catch (_e) {}
+      if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        document.documentElement.dataset.theme = 'dark';
+      } else {
+        document.documentElement.dataset.theme = 'light';
+      }
+    })();
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet"
-        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Manrope:wght@700;800&display=swap" />
+        href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Outfit:wght@300..700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" />
   <script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js"></script>
-  <link rel="stylesheet" href="/static/style.css?v=29" />
+  <link rel="stylesheet" href="/static/style.css?v=51" />
+  <script>
+    window.__ARXIV_CAN_WRITE__ = {{ 'true' if can_write is not defined or can_write else 'false' }};
+    window.__ARXIV_NAV__ = {{ nav_json|safe if nav_json is defined else '{}' }};
+  </script>
+  <script src="/static/paper_state.js?v={{ paper_state_v|default('1') }}"></script>
+  <script src="/static/ui_shell.js?v={{ ui_shell_v|default('1') }}" defer></script>
   {% block head %}{% endblock %}
 </head>
-<body>
-  <aside id="sidebar">
-    <header class="sidebar-header">
-      <div class="sidebar-brand">
-        <svg class="brand-icon" viewBox="0 0 64 64" fill="none" aria-hidden="true">
-          <!-- arXiv official X logomark (colors set in style.css for dark mode). -->
-          <svg x="1" y="0" width="44" height="59" viewBox="0 0 74.492 100.25">
-            <g class="logo-mark">
-              <path d="M586.72,255.616a3.377,3.377,0,0,1,.448.031,5.917,5.917,0,0,1,3.581,2.79c.454,1.116.314,2.023-1.315,4.141L563.168,293.6l-8.558-10.047,29.348-26.616a4.406,4.406,0,0,1,2.762-1.321m0-1.5a5.766,5.766,0,0,0-3.69,1.643l-.041.032-.038.035L553.6,282.442l-1.077.977.943,1.107,8.558,10.047,1.145,1.344,1.141-1.348,26.267-31.022.022-.027.022-.028c1.574-2.046,2.327-3.622,1.516-5.619a7.309,7.309,0,0,0-4.779-3.714,5.083,5.083,0,0,0-.64-.043Z" transform="translate(-526.086 -245.559)"/>
-              <path d="M553.423,284.593l8.977,10.558L597.911,337.9c.873,1.093,1.419,2.186,1.047,3.418a4.092,4.092,0,0,1-2.721,2.837,3.557,3.557,0,0,1-1.045.159,4,4,0,0,1-2.687-1.124L548.01,300.808c-3.5-3.5-2.971-8.151.436-11.558l4.977-4.657m.124-2.17L552.4,283.5l-4.976,4.656c-4.192,4.191-4.372,9.816-.473,13.714l44.521,42.4a5.485,5.485,0,0,0,3.722,1.538,5.1,5.1,0,0,0,1.483-.224,5.59,5.59,0,0,0,3.719-3.838,5.176,5.176,0,0,0-1.31-4.788l-35.53-42.767-8.988-10.571-1.019-1.2Z" transform="translate(-526.086 -245.559)"/>
-              <path d="M562.4,295.151l9.556,11.5,5.761-5.356a7.926,7.926,0,0,0,.041-11.743l-43.7-41.923s-1.671-2.029-3.437-2.071a4.49,4.49,0,0,0-4.23,2.718c-.688,1.651-.194,2.809,1.315,4.97l29.306,35.565Z" transform="translate(-526.086 -245.559)"/>
-              <path d="M553.7,306.223l-17.116,21.024c-1.255,1.337-2.032,3.683-1.331,5.367a4.587,4.587,0,0,0,4.287,2.841,4.087,4.087,0,0,0,3.082-1.523l20.328-18.9Z" transform="translate(-526.086 -245.559)"/>
+<body class="shell-topbar">
+  <header class="site-topbar">
+    <div class="topbar-inner">
+      <div class="topbar-left">
+        <a class="brand-link" href="/">
+          <svg class="brand-icon" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+            <svg x="1" y="0" width="44" height="59" viewBox="0 0 74.492 100.25">
+              <g class="logo-mark">
+                <path d="M586.72,255.616a3.377,3.377,0,0,1,.448.031,5.917,5.917,0,0,1,3.581,2.79c.454,1.116.314,2.023-1.315,4.141L563.168,293.6l-8.558-10.047,29.348-26.616a4.406,4.406,0,0,1,2.762-1.321m0-1.5a5.766,5.766,0,0,0-3.69,1.643l-.041.032-.038.035L553.6,282.442l-1.077.977.943,1.107,8.558,10.047,1.145,1.344,1.141-1.348,26.267-31.022.022-.027.022-.028c1.574-2.046,2.327-3.622,1.516-5.619a7.309,7.309,0,0,0-4.779-3.714,5.083,5.083,0,0,0-.64-.043Z" transform="translate(-526.086 -245.559)"/>
+                <path d="M553.423,284.593l8.977,10.558L597.911,337.9c.873,1.093,1.419,2.186,1.047,3.418a4.092,4.092,0,0,1-2.721,2.837,3.557,3.557,0,0,1-1.045.159,4,4,0,0,1-2.687-1.124L548.01,300.808c-3.5-3.5-2.971-8.151.436-11.558l4.977-4.657m.124-2.17L552.4,283.5l-4.976,4.656c-4.192,4.191-4.372,9.816-.473,13.714l44.521,42.4a5.485,5.485,0,0,0,3.722,1.538,5.1,5.1,0,0,0,1.483-.224,5.59,5.59,0,0,0,3.719-3.838,5.176,5.176,0,0,0-1.31-4.788l-35.53-42.767-8.988-10.571-1.019-1.2Z" transform="translate(-526.086 -245.559)"/>
+                <path d="M562.4,295.151l9.556,11.5,5.761-5.356a7.926,7.926,0,0,0,.041-11.743l-43.7-41.923s-1.671-2.029-3.437-2.071a4.49,4.49,0,0,0-4.23,2.718c-.688,1.651-.194,2.809,1.315,4.97l29.306,35.565Z" transform="translate(-526.086 -245.559)"/>
+                <path d="M553.7,306.223l-17.116,21.024c-1.255,1.337-2.032,3.683-1.331,5.367a4.587,4.587,0,0,0,4.287,2.841,4.087,4.087,0,0,0,3.082-1.523l20.328-18.9Z" transform="translate(-526.086 -245.559)"/>
+              </g>
+            </svg>
+            <g class="logo-sparkle">
+              <path d="M50,6 C50,14 52,16 60,16 C52,16 50,18 50,26 C50,18 48,16 40,16 C48,16 50,14 50,6 Z" />
+              <path d="M39,27 C39,30.5 40,31.5 43.5,31.5 C40,31.5 39,32.5 39,36 C39,32.5 38,31.5 34.5,31.5 C38,31.5 39,30.5 39,27 Z" />
             </g>
           </svg>
-          <!-- Sparkle accent (today's picks); color set in style.css. -->
-          <g class="logo-sparkle">
-            <path d="M50,6 C50,14 52,16 60,16 C52,16 50,18 50,26 C50,18 48,16 40,16 C48,16 50,14 50,6 Z" />
-            <path d="M39,27 C39,30.5 40,31.5 43.5,31.5 C40,31.5 39,32.5 39,36 C39,32.5 38,31.5 34.5,31.5 C38,31.5 39,30.5 39,27 Z" />
-          </g>
-        </svg>
-        <div class="brand-text">
-          <p class="kicker">arXiv · astro-ph.HE</p>
-          <h1 class="title">Daily Report</h1>
-        </div>
-      </div>
-    </header>
+          <span class="brand-text">
+            <span class="brand-kicker" aria-label="ASTRO-PH.HE">
+              <span>A</span><span>S</span><span>T</span><span>R</span><span>O</span><span>-</span><span>P</span><span>H</span><span>.</span><span>H</span><span>E</span>
+            </span>
+            <span class="brand-title">Daily Digest</span>
+          </span>
+        </a>
 
-    <section class="sidebar-block">
+        <nav class="dim-tabs" aria-label="Time dimensions">
+          <a class="dim-tab{% if nav is defined and nav.mode == 'day' %} is-active{% endif %}"
+             href="{{ '/r/' + nav.latest_day if nav is defined and nav.latest_day else '/' }}">
+            <span class="dim-name">Day</span>
+            {% if nav is defined and nav.latest_day %}
+              <span class="dim-sub">{{ nav.current_key if nav.mode == 'day' and nav.current_key else nav.latest_day }}</span>
+            {% endif %}
+          </a>
+          <a class="dim-tab{% if nav is defined and nav.mode == 'week' %} is-active{% endif %}"
+             href="/summary?kind=week">
+            <span class="dim-name">Week</span>
+            {% if nav is defined and nav.latest_week %}
+              <span class="dim-sub">{{ nav.current_key if nav.mode == 'week' and nav.current_key else nav.latest_week }}</span>
+            {% endif %}
+          </a>
+          <a class="dim-tab{% if nav is defined and nav.mode == 'month' %} is-active{% endif %}"
+             href="/summary?kind=month">
+            <span class="dim-name">Month</span>
+            {% if nav is defined and nav.latest_month %}
+              <span class="dim-sub">{{ nav.current_key if nav.mode == 'month' and nav.current_key else nav.latest_month }}</span>
+            {% endif %}
+          </a>
+          <a class="dim-tab{% if nav is defined and nav.mode == 'year' %} is-active{% endif %}"
+             href="/summary?kind=year">
+            <span class="dim-name">Year</span>
+            {% if nav is defined and nav.latest_year %}
+              <span class="dim-sub">{{ nav.current_key if nav.mode == 'year' and nav.current_key else nav.latest_year }}</span>
+            {% endif %}
+          </a>
+        </nav>
+      </div>
+
+      <div class="topbar-right">
+        <form class="topbar-search{% if active_nav in ('search', 'similar') %} is-active{% endif %}" action="/search" method="get" role="search">
+          <button type="submit" class="search-ico-btn" title="Open corpus search" aria-label="Open corpus search">
+            <svg class="search-ico" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+              <circle cx="8.5" cy="8.5" r="5.5" stroke="currentColor" stroke-width="1.7" />
+              <path d="M12.8 12.8L17 17" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
+            </svg>
+          </button>
+          <input id="global-search-input"
+                 type="search"
+                 name="q"
+                 value="{{ quick_q|default('') }}"
+                 placeholder="Search corpus, EP, GRB..."
+                 aria-label="Search corpus"
+                 autocomplete="off" />
+          <kbd class="search-kbd" title="Press / to search">/</kbd>
+        </form>
+
+        <nav class="topbar-links" aria-label="Views">
+          <a class="topbar-pill{% if active_nav == 'recommend' %} is-active{% endif %}" href="/recommend">
+            <svg class="pill-ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l2.2 6.8L21 12l-6.8 2.2L12 21l-2.2-6.8L3 12l6.8-2.2z"/></svg>
+            <span>Recommend</span>
+          </a>
+          <a class="topbar-pill{% if active_nav == 'starred' %} is-active{% endif %}" href="/starred">
+            <svg class="pill-ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.2l2.6 5.4 5.9.9-4.3 4.2 1 5.9-5.2-2.8-5.2 2.8 1-5.9-4.3-4.2 5.9-.9z"/></svg>
+            <span>Starred</span>
+          </a>
+        </nav>
+
+        <button id="lang-toggle" type="button" class="lang-toggle-btn" title="Switch content language (中文 / EN)" aria-label="Switch content language">
+          <span class="lang-opt" data-lang-opt="zh">中</span><span class="lang-opt" data-lang-opt="en">EN</span>
+        </button>
+
+        <button id="theme-toggle" type="button" class="theme-toggle-btn" title="Toggle theme" aria-label="Toggle color theme">
+          <svg class="ico-sun" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="1.8" />
+            <path d="M12 2.5v2.2M12 19.3v2.2M4.7 4.7l1.6 1.6M17.7 17.7l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.7 19.3l1.6-1.6M17.7 6.3l1.6-1.6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+          </svg>
+          <svg class="ico-moon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M20.2 14.5A8.5 8.5 0 0 1 9.5 3.8a8.5 8.5 0 1 0 10.7 10.7z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <div class="site-subbar">
+    <div class="subbar-inner">
+      <div class="period-nav">
+        {% if nav is defined %}
+          {% if nav.mode in ('day', 'week', 'month', 'year') %}
+            {% if nav.prev_href %}
+              <a class="nav-step" href="{{ nav.prev_href }}" title="Older period" aria-label="Older period"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg></a>
+            {% else %}
+              <span class="nav-step is-disabled" aria-disabled="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg></span>
+            {% endif %}
+          {% endif %}
+
+          <div id="cal-wrap" class="cal-wrap">
+            <button id="cal-trigger-btn" type="button" class="cal-trigger" aria-expanded="false" aria-haspopup="dialog">
+              <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <rect x="3" y="4.2" width="14" height="12.8" rx="2.2" stroke="currentColor" stroke-width="1.5" />
+                <path d="M3 8.2h14M6.8 2.5v2.8M13.2 2.5v2.8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+              </svg>
+              <span class="cal-trigger-label">{{ nav.current_label }}</span>
+              {% if nav.current_count %}
+                <span class="cal-trigger-count">{{ nav.current_count }}</span>
+              {% endif %}
+              <svg class="cal-caret-ico" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <div id="cal-popover" class="cal-popover" hidden role="dialog" aria-label="Calendar navigator"></div>
+          </div>
+
+          {% if nav.mode in ('day', 'week', 'month', 'year') %}
+            {% if nav.next_href %}
+              <a class="nav-step" href="{{ nav.next_href }}" title="Newer period" aria-label="Newer period"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 6 15 12 9 18"/></svg></a>
+            {% else %}
+              <span class="nav-step is-disabled" aria-disabled="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 6 15 12 9 18"/></svg></span>
+            {% endif %}
+          {% endif %}
+
+          {% if nav.latest_href %}
+            <a class="nav-latest-btn" href="{{ nav.latest_href }}">Latest</a>
+          {% endif %}
+          {% if nav.standalone_href %}
+            <a class="nav-standalone-link" href="{{ nav.standalone_href }}" target="_blank" rel="noopener noreferrer">Standalone ↗</a>
+          {% endif %}
+        {% endif %}
+      </div>
+
       <div id="controls"
            hx-get="/controls?active={{ selected_date.isoformat() if selected_date else '' }}"
            hx-trigger="every 30s, generate-done from:body"
            hx-swap="innerHTML">
         {{ controls_html|safe }}
       </div>
-    </section>
-
-    <section class="sidebar-block">
-      <a class="sidebar-quick-link" href="/starred">
-        <span class="quick-link-icon" aria-hidden="true">★</span>
-        <span>Starred paper list</span>
-      </a>
-    </section>
-
-    <section class="sidebar-block">
-      <h2 class="sidebar-h2">Recent</h2>
-      <div id="recent-list"
-           hx-get="/recent?active={{ selected_date.isoformat() if selected_date else '' }}"
-           hx-trigger="load, every 60s, generate-done from:body"
-           hx-swap="innerHTML">
-        <!-- populated by HTMX -->
-      </div>
-    </section>
-  </aside>
+    </div>
+  </div>
 
   <main id="main-area">
     {% block main %}{% endblock %}
   </main>
+
+  <script>
+  (function() {
+    var UNMARKED_PREFIX = 'arxiv-report-obsidian-unmarked:';
+    var ICONS = {
+      star: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.8l-5.2 2.7 1-5.8-4.2-4.1 5.8-.8L12 3.5z"/></svg>',
+      starFilled: '<svg class="is-filled" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.8l-5.2 2.7 1-5.8-4.2-4.1 5.8-.8L12 3.5z"/></svg>',
+      bookmark: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5h10a1 1 0 0 1 1 1v15l-6-3.3-6 3.3v-15a1 1 0 0 1 1-1z"/></svg>',
+      bookmarkFilled: '<svg class="is-filled" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5h10a1 1 0 0 1 1 1v15l-6-3.3-6 3.3v-15a1 1 0 0 1 1-1z"/></svg>',
+      copy: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v1"/></svg>',
+      check: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg>'
+    };
+
+    function cardData(card) {
+      try {
+        return JSON.parse(card.dataset.paper || '{}');
+      } catch (_e) {
+        return {};
+      }
+    }
+
+    function cardBase(data) {
+      return 'arxiv-report:' + (data.reportDate || 'corpus') + ':' + (data.arxivId || 'paper');
+    }
+
+    function snapshotFromData(data) {
+      return {
+        url: data.url || '',
+        arxivId: data.arxivId || '',
+        titleEn: data.titleEn || '',
+        titleZh: data.titleZh || '',
+        authors: data.authors || '',
+        question: data.question || '',
+        questionEn: data.questionEn || '',
+        method: data.method || '',
+        methodEn: data.methodEn || '',
+        methodTag: data.methodTag || '',
+        result: data.result || '',
+        resultEn: data.resultEn || '',
+        caveat: data.caveat || '',
+        caveatEn: data.caveatEn || '',
+        status: data.status || 'submitted',
+        statusLabel: data.statusLabel || '',
+        statusVisible: Boolean(data.statusLabel && data.statusLabel !== 'Submitted' && data.statusLabel !== '已投稿'),
+        reportDate: data.reportDate || '',
+        reportHref: data.reportHref || '',
+        number: data.number ? String(data.number) : ''
+      };
+    }
+
+    function isObsidianSaved(base, arxivId) {
+      try {
+        if (localStorage.getItem(base + ':obsidian') === '1' || localStorage.getItem(base + ':crafted') === '1') {
+          return true;
+        }
+        if (!arxivId || localStorage.getItem(UNMARKED_PREFIX + arxivId) === '1') return false;
+      } catch (_e) {
+        return false;
+      }
+      var ids = Array.isArray(window.__OBSIDIAN_SAVED_IDS__) ? window.__OBSIDIAN_SAVED_IDS__ : [];
+      var bare = arxivId.replace(/v\d+$/i, '');
+      return ids.indexOf(arxivId) !== -1 || ids.some(function(x) { return x.replace(/v\d+$/i, '') === bare; });
+    }
+
+    window.syncCorpusCards = function() {
+      document.querySelectorAll('.corpus-card').forEach(function(card) {
+        var data = cardData(card);
+        var base = cardBase(data);
+        var starred = false;
+        try { starred = localStorage.getItem(base + ':starred') === '1'; } catch (_e) {}
+        var obs = isObsidianSaved(base, data.arxivId || '');
+        card.classList.toggle('is-starred', starred);
+        card.classList.toggle('is-obsidian', obs);
+        var starBtn = card.querySelector('.corpus-star-btn');
+        if (starBtn) {
+          starBtn.classList.toggle('is-active', starred);
+          starBtn.innerHTML = starred ? ICONS.starFilled : ICONS.star;
+          starBtn.title = starred ? 'Remove star' : 'Mark as starred';
+        }
+        var obsBtn = card.querySelector('.corpus-obsidian-btn');
+        if (obsBtn) {
+          if (window.__ARXIV_CAN_WRITE__ === false) {
+            obsBtn.style.display = 'none';
+          } else {
+            obsBtn.classList.toggle('is-active', obs);
+            obsBtn.innerHTML = obs ? ICONS.bookmarkFilled : ICONS.bookmark;
+            obsBtn.title = obs ? 'Remove Obsidian mark' : 'Save to Obsidian';
+          }
+        }
+      });
+    };
+
+    window.collectBrowserStarredPids = function() {
+      var seen = {};
+      var pids = [];
+      try {
+        for (var i = 0; i < localStorage.length; i += 1) {
+          var key = localStorage.key(i);
+          if (!key || key.indexOf('arxiv-report:') !== 0 || !key.endsWith(':starred')) continue;
+          if (localStorage.getItem(key) !== '1') continue;
+          var parts = key.split(':');
+          var rawId = parts.length >= 3 ? parts[2] : '';
+          var m = rawId.match(/(\d{4}\.\d{4,5}|[a-z-]+\/\d{7})/i);
+          if (m && !seen[m[1]]) {
+            seen[m[1]] = true;
+            pids.push(m[1]);
+          }
+        }
+      } catch (_e) {}
+      return pids;
+    };
+
+    function formatMarkdown(data, note) {
+      var lines = [
+        data.titleEn || 'Unknown',
+        '',
+        '[arXiv:' + (data.arxivId || 'Unknown') + '](' + (data.url || '') + ')',
+        '',
+        '**作者：** ' + (data.authors || 'Unknown'),
+        ''
+      ];
+      var analysis = [];
+      if (data.question) analysis.push('**研究问题：** ' + data.question);
+      if (data.method) {
+        var m = data.methodTag ? '[' + data.methodTag + '] ' + data.method : data.method;
+        analysis.push('**研究方法：** ' + m);
+      }
+      if (data.result) analysis.push('**研究结果：** ' + data.result);
+      if (data.caveat) analysis.push('**潜在不足与延伸方向：** ' + data.caveat);
+      if (analysis.length) lines.push(analysis.join('\n'));
+      if (note && note.trim()) lines.push('', '---', '', '**个人备注：** ' + note.trim());
+      return lines.join('\n') + '\n';
+    }
+
+    document.addEventListener('click', function(e) {
+      var starBtn = e.target.closest ? e.target.closest('.corpus-star-btn') : null;
+      if (starBtn) {
+        var card = starBtn.closest('.corpus-card');
+        if (!card) return;
+        var data = cardData(card);
+        var base = cardBase(data);
+        var next = localStorage.getItem(base + ':starred') === '1' ? '' : '1';
+        localStorage.setItem(base + ':paper', JSON.stringify(snapshotFromData(data)));
+        if (next) {
+          localStorage.setItem(base + ':starred', '1');
+        } else {
+          localStorage.removeItem(base + ':starred');
+        }
+        window.syncCorpusCards();
+        return;
+      }
+
+      var obsBtn = e.target.closest ? e.target.closest('.corpus-obsidian-btn') : null;
+      if (obsBtn) {
+        var oCard = obsBtn.closest('.corpus-card');
+        if (!oCard) return;
+        var oData = cardData(oCard);
+        var oBase = cardBase(oData);
+        var oid = oData.arxivId || '';
+        if (isObsidianSaved(oBase, oid)) {
+          localStorage.removeItem(oBase + ':obsidian');
+          if (oid) localStorage.setItem(UNMARKED_PREFIX + oid, '1');
+          window.syncCorpusCards();
+          return;
+        }
+        var note = prompt('Optional personal note:');
+        if (note === null) return;
+        fetch('/api/obsidian/save', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            arxiv_id: oid,
+            url: oData.url || '',
+            title_en: oData.titleEn || '',
+            title_zh: oData.titleZh || '',
+            authors: oData.authors || '',
+            question: oData.question || '',
+            method: oData.method || '',
+            method_tag: oData.methodTag || '',
+            result: oData.result || '',
+            caveat: oData.caveat || '',
+            paper_status: oData.status || 'submitted',
+            report_date: oData.reportDate || '',
+            note: note
+          })
+        }).then(function(r) {
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.json();
+        }).then(function() {
+          if (oid) {
+            localStorage.removeItem(UNMARKED_PREFIX + oid);
+            if (Array.isArray(window.__OBSIDIAN_SAVED_IDS__) && window.__OBSIDIAN_SAVED_IDS__.indexOf(oid) === -1) {
+              window.__OBSIDIAN_SAVED_IDS__.push(oid);
+            }
+          }
+          localStorage.setItem(oBase + ':paper', JSON.stringify(snapshotFromData(oData)));
+          localStorage.setItem(oBase + ':obsidian', '1');
+          window.syncCorpusCards();
+        }).catch(function(err) {
+          alert('Failed to save to Obsidian: ' + err.message);
+        });
+        return;
+      }
+
+      var copyBtn = e.target.closest ? e.target.closest('.corpus-copy-btn') : null;
+      if (copyBtn) {
+        var cCard = copyBtn.closest('.corpus-card');
+        if (!cCard) return;
+        var cData = cardData(cCard);
+        var cNote = prompt('Optional personal note:');
+        if (cNote === null) return;
+        var md = formatMarkdown(cData, cNote);
+        var oldHtml = copyBtn.innerHTML;
+        if (navigator.clipboard && window.isSecureContext) {
+          navigator.clipboard.writeText(md).then(function() {
+            copyBtn.innerHTML = ICONS.check;
+            setTimeout(function() { copyBtn.innerHTML = oldHtml; }, 1400);
+          });
+        } else {
+          var ta = document.createElement('textarea');
+          ta.value = md;
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          ta.remove();
+          copyBtn.innerHTML = ICONS.check;
+          setTimeout(function() { copyBtn.innerHTML = oldHtml; }, 1400);
+        }
+      }
+    });
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', window.syncCorpusCards);
+    } else {
+      window.syncCorpusCards();
+    }
+  })();
+  </script>
 </body>
 </html>

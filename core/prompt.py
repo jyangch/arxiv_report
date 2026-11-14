@@ -3,6 +3,7 @@
 import re
 
 from core.pub_status import classify_pub_status
+from core.topics import TOPICS, prompt_topic_lines
 
 _ARXIV_DISPLAY_ID_RE = re.compile(r'/abs/([^/?#]+)')
 
@@ -25,13 +26,14 @@ def _render_status_badge(paper: dict) -> str:
     return f'<span class="status-tag status-{status_class}">{label}</span>'
 
 
-def _build_input_text(papers: list[dict]) -> str:
+def _build_input_text(papers: list[dict], start_index: int = 1) -> str:
     """Concatenate the per-paper input blocks fed into the prompt template."""
     blocks = []
     for i, p in enumerate(papers):
+        idx = start_index + i
         badge = _render_status_badge(p)
         blocks.append(
-            f'[{i + 1}] arXiv ID: {_arxiv_display_id(p["url"])}\n'
+            f'[{idx}] arXiv ID: {_arxiv_display_id(p["url"])}\n'
             f'URL: {p["url"]}\n'
             f'Title: {p["title"]}\n'
             f'Authors: {p["authors"]}\n'
@@ -68,29 +70,23 @@ _PROMPT_TEMPLATE = """\
 第一部分：领域索引
 - 用 <div class="index-box"> 包裹，内部首行为 <h3>领域索引</h3>
 - 仅从以下固定子领域中选择，类别名严格使用中文标签和括号中的英文缩写：
-    1. 伽马射线暴（GRB）
-    2. 快速射电暴（FRB）
-    3. 超新星、千新星与瞬变源（SNe / Kilonova / TDE / FBOT）
-    4. 活动星系核与耀变体（AGN / Blazar / Quasar）
-    5. 中子星、脉冲星与磁星（NS / Pulsar / Magnetar）
-    6. 致密双星合并与引力波多信使（GW / Compact mergers）
-    7. X 射线双星与吸积物理（XRB / Accretion / Disk-Jet）
-    8. 黑洞与相对论喷流（BH / Jets / SMBH）
-    9. 宇宙射线与高能中微子（UHECR / Galactic CR / HE ν）
-    10. 甚高能与超高能伽马射线天文（VHE / UHE γ-ray）
-    11. 超新星遗迹、星际介质与星系团（SNR / ISM / ICM）
-    12. 理论、数值方法与仪器（Theory / Numerical / Instrumentation）
-- 每篇论文按主体研究对象归入 1-2 个最相关的类别，避免无原则地多归
-- 类别 12（理论、数值方法与仪器）仅用于**方法本身是主要贡献**的论文（如新数值格式、新探测器、新统计方法）；论文若是针对具体天体的数值模拟（如 GRB 喷流 MHD、AGN GRMHD），归入该天体所在类别而非类别 12
+{topic_lines}
+- 每篇论文按第一主归属归入 1 个最核心类别，仅当研究具有明确跨领域双重主题时可额外多加 1 个次要类别（严禁超过 2 个类别）
+- 类别 2（FXT / EP）仅用于观测或认证河外快 X 射线暂现源（如 Einstein Probe / EP-WXT / EP-FXT、Chandra、XMM-Newton 发现的 FXT/EFXT/LFBOT）；若论文主体是 EP 载荷标定、探测效率或触发管线而非具体暂现源物理，归入类别 {topic_count}（Inst / ML）
+- 类别 4（SNe / KN）仅用于超新星、千新星与核坍缩光学或高能爆炸；类别 5（TDE / QPE）仅用于潮汐瓦解事件、准周期喷发（QPE）与变脸 AGN 核区暂现源；银河系吸积白矮星新星与激变变星（CV / Nova）归入类别 7（XRB / WD）而非类别 4
+- 类别 9（BH / GR）仅用于强场引力、广义相对论效应、EHT 阴影与纯黑洞时空理论；具体的 AGN 喷流与能谱拟合归入类别 10（AGN），X 射线双星吸积态与 QPO 归入类别 7（XRB / WD），引力波波形与并合率归入类别 8（GW），GRB 归入类别 1（GRB），严禁重叠双标
+- 类别 14（DM / ALP）专门收录暗物质间接探测、轴子与类轴子粒子（ALP）、原初黑洞（PBH）与洛伦兹破缺等天体粒子新物理
+- 类别 15（Plasma）用于粒子加速、磁重联、无碰撞激波与基本高能辐射微物理过程（不绑定单一爆源的纯等离子体或 MHD 理论）
+- 类别 {topic_count}（Inst / ML）仅用于**仪器载荷、标定管线、统计方法与机器学习本身为主要贡献**的论文；针对具体天体的数值模拟（如 GRB 喷流 MHD、AGN GRMHD）归入该天体所在类别而非类别 {topic_count}
 - 若全部论文都不属于某类别，则省略该类别行
 - 每个非空类别输出一行，类别名**完整复制**上表中"中文（英文缩写）"原文（包括括号与斜杠），示例：
-    <p><strong>伽马射线暴（GRB）：</strong> <a href="#p1">[1]</a>, <a href="#p5">[5]</a></p>
-    <p><strong>活动星系核与耀变体（AGN / Blazar / Quasar）：</strong> <a href="#p3">[3]</a></p>
-- 类别按上表 1-12 顺序排列
+    <p><strong>潮汐瓦解与核区暂现源（TDE / QPE）：</strong> <a href="#p1">[1]</a>, <a href="#p5">[5]</a></p>
+    <p><strong>活动星系核、耀变体与喷流（AGN / Blazar / Jets）：</strong> <a href="#p3">[3]</a></p>
+- 类别按上表 1-{topic_count} 顺序排列
 
 第二部分：今日重点（可选）
 - 用 <div class="highlight-box"> 包裹
-- 从 {paper_count} 篇论文中挑选 0-3 篇真正具有非平凡科学贡献的，宁缺毋滥。判定标准（满足任一即可）：
+- 从本批 {paper_count} 篇论文（编号 {start_index} 到 {end_index}）中挑选 0-{max_highlights} 篇真正具有非平凡科学贡献的，宁缺毋滥。判定标准（满足任一即可）：
     - 首次观测/探测某现象、新天体、或新能段
     - 对主流理论模型给出强约束或反例
     - 跨子领域方法迁移（如 ML 应用于物理参数推断）
@@ -100,23 +96,24 @@ _PROMPT_TEMPLATE = """\
     - 增加样本/扩大目录（除非首次跨越关键阈值或新天体类型）
     - 重复验证既有结论而无新约束
     - 综述、仪器/巡天介绍、数据释出（DR）类
-- **顶刊状态作为次要权重**：在上述科学贡献判断基础上，下列顶刊的"已发表/已接收/已投稿"状态可推升入选优先级（信息来自 Status badge HTML 字段中的期刊名）：
+- **顶刊状态作为次要权重**：在上述科学贡献判断基础上，下列顶刊的 Published / Accepted / Submitted（已发表/已接收/已投稿）状态可推升入选优先级（信息来自 Status badge HTML 字段中的期刊名）：
     - 一档：Nature、Science 主刊
     - 二档：Nature Astronomy / Nature Physics / Nature Communications / Science Advances、Physical Review Letters (PRL)
     - 其余期刊（ApJ、MNRAS、A&A、PRD 等）视为常规权重
 - 状态权重的边界：
     - 顶刊背书**不能替代**科学贡献判断：仅有顶刊状态但属于增量改进/综述/数据释出类的**不入选**
     - 反之，纯预印本（无徽章）若有非平凡科学贡献仍可入选，不要因没徽章而漏选
-    - 同等贡献情况下，顶刊已发表 > 已接收 > 已投稿 > 其他期刊 > 预印本
+    - 同等贡献情况下，顶刊 Published（已发表）> Accepted（已接收）> Submitted（已投稿）> 其他期刊 > 预印本
 - 若全部论文都是常规进展、纯数据释出、增量改进、综述类，则**整个 highlight-box 省略**，不要写"今日无亮点"、"暂无重点"等占位句
-- 结构如下（最多 3 行 <p>）：
+- 结构如下（最多入选 {max_highlights} 篇，每篇成对输出 1 行中文与 1 行英文 <p>）：
   <div class="highlight-box">
   <h3>今日重点</h3>
-  <p><a href="#pN">[N]</a> 1 句中文，明确指出该论文的非平凡之处（如"首次给出 X 现象 PeV 段上限"、"挑战 Y 主流模型"），不要复述"研究问题"原话</p>
+  <p class="hl-zh" data-lang="zh"><a href="#pN">[N]</a> 1 句精炼中文点出该工作的非平凡科学贡献（如首次给出某能段上限、挑战某标准模型等），避免原样重复“研究问题”</p>
+  <p class="hl-en" data-lang="en"><a href="#pN">[N]</a> 1 concise English sentence stating the paper's non-trivial contribution (e.g., first PeV upper limit on X, or challenging the standard Y model), without repeating the Research Question verbatim</p>
   </div>
 
 第三部分：论文条目
-按编号 1 到 {paper_count} 顺序排列。每篇严格按以下模板（N 替换为论文编号）：
+按编号 {start_index} 到 {end_index} 顺序排列。每篇严格按以下模板（N 替换为论文编号）：
 
 <div class="paper-item" id="pN">
 <h3>[N] <a href="URL 字段值">arXiv ID 字段值</a> [粘贴 Status badge HTML 字段（处理规则见写作要求）]</h3>
@@ -124,17 +121,21 @@ _PROMPT_TEMPLATE = """\
 <p><strong>中文标题：</strong>专业学术翻译</p>
 <p><strong>作者：</strong>作者列表（超过 5 位仅列前 5 位，末尾追加 "et al."）</p>
 <p><strong>研究问题：</strong>1 句中文，点出这篇文章试图回答/质疑/检验的具体科学问题或切入点</p>
+<p><strong>Research Question:</strong> 1 concise English sentence stating the exact scientific question or controversy tested by this paper</p>
 <p><strong>研究方法：</strong><span class="method-tag">[Observation]</span> 2-3 句中文，直接描述核心方法与数据/模型</p>
+<p><strong>Method:</strong> 2-3 concise English sentences summarizing the core methodology, dataset, or theoretical/numerical model (omit the [Observation] tag here)</p>
 <p><strong>研究结果：</strong>2-4 句中文，直接陈述关键物理发现，至少含一个定量数值、能段、或显著性约束</p>
+<p><strong>Results:</strong> 2-4 concise English sentences reporting the key quantitative physical findings, energy ranges, or significance constraints</p>
 <p><strong>潜在不足与延伸方向：</strong>1 句中文指出这篇文章可见的局限性；1 句中文给出具体可执行的延伸方向</p>
+<p><strong>Limitations &amp; Next Steps:</strong> 1 concise English sentence identifying visible caveats/limitations and 1 actionable follow-up direction</p>
 </div>
 
 写作要求：
-- 学术语气、信息密度高，不要写"本文研究了"、"研究人员发现"、"该工作探讨了"这类填充语
-- "研究问题"必须具体：写明文章针对的具体科学争议、待检验假设、或观测/理论缺口
+- 中英文内容保持学术语气、信息密度高，语义对齐且互为双语对照，不要写"本文研究了"、"This paper studies"这类填充语
+- "研究问题" / "Research Question" 必须具体：写明文章针对的具体科学争议、待检验假设、或观测/理论缺口
     - ❌ 泛背景："GRB 是宇宙中最剧烈的爆发现象"
     - ✅ 具体问题："用 NICER X 射线脉冲轮廓拟合约束中子星半径 R，区分软态与硬态核物态方程"
-- 若论文确实没有非平凡的科学问题（如：纯数据释出、仪器/巡天介绍、综述类、纯方法论文），则**整行 <p><strong>研究问题：</strong>...</p> 省略**，不要写"无明确问题"、"旨在介绍 X"等占位句
+- 若论文确实没有非平凡的科学问题（如：纯数据释出、仪器/巡天介绍、综述类、纯方法论文），则**同时省略 <p><strong>研究问题：</strong>...</p> 与 <p><strong>Research Question:</strong> ...</p> 两行**，不要写占位句
 - "研究方法"标签按论文主体方法判断，<span class="method-tag"> 内的标签**必须**保留方括号：
     - 纯数据分析 → [Observation]
     - 数值/MHD/N-body → [Simulation]
@@ -150,18 +151,28 @@ _PROMPT_TEMPLATE = """\
     - 延伸方向必须**可执行**：写明具体数据集/波段/方法/约束（如"用 XRISM 高分辨 Fe Kα 线轮廓检验吸积盘几何"），禁止"未来可进一步探索"这种空话
     - ❌ 套话："样本量较小，未来可扩大；可结合多波段观测"
     - ✅ 具体："仅 3 个 BL Lac 源且全部为高态阶段，对 jet-disk 关联推断存在样本偏差；用 Fermi-LAT 4FGL 中 ~50 个 LSP BL Lac 子样本可减弱该偏差"
-    - 若 abstract 信息密度不足以做出**有信息量**的判断（如仅给出常规巡天数据释出、纯综述、仪器介绍），则**整行 <p><strong>潜在不足与延伸方向：</strong>...</p> 省略**，不要凑数
+    - 若 abstract 信息密度不足以做出**有信息量**的判断（如仅给出常规巡天数据释出、纯综述、仪器介绍），则**同时省略 <p><strong>潜在不足与延伸方向：</strong>...</p> 与 <p><strong>Limitations &amp; Next Steps:</strong> ...</p> 两行**，不要凑数
 - "Status badge HTML" 字段已是预渲染的 HTML 片段，**逐字符原样**插入 <h3> 中 Entry ID 链接之后，不要修改 class 名、不要重写文本、不要加注释；若值为 "(none)" 则不插入任何内容
-- "Status badge HTML" 字段除作为徽章渲染外，其期刊名信息还作为"今日重点"的次要权重输入（具体优先级见第二部分顶刊状态规则）
+- "Status badge HTML" 字段除作为徽章渲染外，其期刊名信息还作为"Today's Highlights"的次要权重输入（具体优先级见第二部分顶刊状态规则）
 
 待处理论文：
 {input_text}
 """
 
 
-def build_prompt(papers: list[dict]) -> str:
+def build_prompt(
+    papers: list[dict],
+    start_index: int = 1,
+    max_highlights: int = 3,
+) -> str:
     """Render the full prompt sent to the LLM."""
+    end_index = start_index + len(papers) - 1 if papers else start_index
     return _PROMPT_TEMPLATE.format(
         paper_count=len(papers),
-        input_text=_build_input_text(papers),
+        start_index=start_index,
+        end_index=end_index,
+        max_highlights=max_highlights,
+        topic_lines=prompt_topic_lines(),
+        topic_count=len(TOPICS),
+        input_text=_build_input_text(papers, start_index=start_index),
     )

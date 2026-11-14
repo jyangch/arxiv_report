@@ -1,0 +1,164 @@
+{% if items %}
+  <div class="corpus-list">
+    {% for p in items %}
+      {% set snapshot = {
+        'url': p.url,
+        'arxivId': p.arxiv_id,
+        'titleEn': p.title,
+        'titleZh': p.title_zh,
+        'authors': p.authors,
+        'question': p.question_zh,
+        'questionEn': p.question_en,
+        'method': p.method_zh,
+        'methodEn': p.method_en,
+        'methodTag': p.method_tag,
+        'result': p.result_zh,
+        'resultEn': p.result_en,
+        'caveat': p.caveat_zh,
+        'caveatEn': p.caveat_en,
+        'status': p.pub_status,
+        'statusLabel': p.status_label,
+        'reportDate': p.report_date,
+        'reportHref': p.report_href,
+        'number': p.number
+      } %}
+      <article class="corpus-card" data-paper='{{ snapshot | tojson | e }}'>
+        <header class="corpus-card-head">
+          <div class="corpus-card-ledger">
+            {% if p.score is defined %}
+              <span class="sim-badge" title="Similarity / ranking score">{{ '%.2f'|format(p.score) }}</span>
+            {% endif %}
+            {% if p.report_href %}
+              <a class="ledger-link" href="{{ p.report_href }}">{{ p.report_date }} · [{{ p.number }}]</a>
+              <span class="ledger-sep" aria-hidden="true">·</span>
+            {% elif p.report_date %}
+              <span class="ledger-text">{{ p.report_date }}</span>
+              <span class="ledger-sep" aria-hidden="true">·</span>
+            {% endif %}
+            <a class="ledger-arxiv" href="{{ p.url }}" target="_blank" rel="noopener noreferrer">{{ p.arxiv_id }}</a>
+            <span class="ledger-sep" aria-hidden="true">·</span>
+            <a class="ledger-link-muted" href="{{ p.pdf_url }}" target="_blank" rel="noopener noreferrer">PDF</a>
+            {% if p.scix_url %}
+              <span class="ledger-sep" aria-hidden="true">·</span>
+              {% if p.citation_count is not none and p.citation_count > 0 %}
+                <a class="cite-badge is-cited" href="{{ p.scix_url }}" target="_blank" rel="noopener noreferrer" title="Cited {{ p.citation_count }} times ({{ (p.cite_source or 'SciX')|upper }}) · Open in NASA SciX">Cited {{ p.citation_count }}</a>
+              {% else %}
+                <a class="ledger-link-muted scix-link" href="{{ p.scix_url }}" target="_blank" rel="noopener noreferrer" title="Open in NASA SciX / ADS">SciX</a>
+              {% endif %}
+            {% endif %}
+            {% if p.method_tag %}
+              <span class="ledger-sep" aria-hidden="true">·</span>
+              <span class="ledger-method">[{{ p.method_tag }}]</span>
+            {% endif %}
+            {% if p.status_label and p.pub_status != 'submitted' %}
+              <span class="ledger-status status-{{ p.pub_status }}">{{ p.status_label }}</span>
+            {% endif %}
+            {% if p.is_highlight %}
+              <span class="ledger-highlight">★ Highlight</span>
+            {% endif %}
+          </div>
+
+          <div class="corpus-card-actions">
+            <button type="button" class="corpus-action-btn corpus-star-btn" title="Mark as starred" aria-label="Mark as starred">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.8l-5.2 2.7 1-5.8-4.2-4.1 5.8-.8L12 3.5z"/></svg>
+            </button>
+            <button type="button" class="corpus-action-btn corpus-obsidian-btn" title="Save to Obsidian" aria-label="Save to Obsidian">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5h10a1 1 0 0 1 1 1v15l-6-3.3-6 3.3v-15a1 1 0 0 1 1-1z"/></svg>
+            </button>
+            <button type="button" class="corpus-action-btn corpus-copy-btn" title="Copy Markdown" aria-label="Copy Markdown">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v1"/></svg>
+            </button>
+            <a class="corpus-action-btn" href="/similar/{{ p.pid }}" title="Find similar papers" aria-label="Find similar papers">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8.3 10.9l7.4-3.8"/><path d="M8.3 13.1l7.4 3.8"/></svg>
+            </a>
+          </div>
+        </header>
+
+        {% if p.matched_terms or p.nearest_positive %}
+          <div class="rec-reason">
+            {% if p.matched_terms %}
+              <span><strong>Matched terms:</strong> {% for term in p.matched_terms %}{% if not loop.first %} <span class="ledger-sep" aria-hidden="true">·</span> {% endif %}{{ term }}{% endfor %}</span>
+            {% endif %}
+            {% if p.nearest_positive %}
+              <span><strong>Similar to saved:</strong> <a href="/similar/{{ p.nearest_positive.pid }}">[{{ p.nearest_positive.pid }}]</a> {% if p.nearest_positive.title_zh %}<span class="corpus-lang-zh{% if p.nearest_positive.title %} has-en-pair{% endif %}">{{ p.nearest_positive.title_zh }}</span>{% endif %}{% if p.nearest_positive.title %}<span class="corpus-lang-en{% if p.nearest_positive.title_zh %} has-zh-pair{% endif %}">{{ p.nearest_positive.title }}</span>{% endif %} ({{ '%.2f'|format(p.nearest_positive.similarity) }})</span>
+            {% endif %}
+          </div>
+        {% elif p.shared_terms %}
+          <div class="rec-reason">
+            <span><strong>Shared features:</strong> {% for term in p.shared_terms %}{% if not loop.first %} <span class="ledger-sep" aria-hidden="true">·</span> {% endif %}{{ term }}{% endfor %}</span>
+          </div>
+        {% endif %}
+
+        {% if p.title_zh %}
+          <h3 class="corpus-title-zh corpus-lang-zh{% if p.title %} has-en-pair{% endif %}">{{ p.title_zh }}</h3>
+        {% endif %}
+        {% if p.title %}
+          <p class="corpus-title-en corpus-lang-en{% if p.title_zh %} has-zh-pair{% endif %}">{{ p.title }}</p>
+        {% endif %}
+        {% if p.authors %}
+          <p class="corpus-authors">{{ p.authors }}</p>
+        {% endif %}
+
+        {% if p.result_zh or p.result_en %}
+          {% if p.result_zh %}
+            {% set has_res_en = p.result_en or p.summary %}
+            <p class="corpus-summary corpus-lang-zh{% if has_res_en %} has-en-pair{% endif %}"><strong>研究结果：</strong>{{ p.result_zh }}</p>
+          {% endif %}
+          {% if p.result_en %}
+            <p class="corpus-summary corpus-lang-en{% if p.result_zh %} has-zh-pair{% endif %}"><strong>Results:</strong> {{ p.result_en }}</p>
+          {% elif p.result_zh and p.summary %}
+            <p class="corpus-summary corpus-lang-en has-zh-pair"><strong>Abstract:</strong> {{ p.summary[:340] }}{% if p.summary|length > 340 %}...{% endif %}</p>
+          {% endif %}
+        {% elif p.summary %}
+          <p class="corpus-summary">{{ p.summary[:340] }}{% if p.summary|length > 340 %}...{% endif %}</p>
+        {% endif %}
+
+        {% if p.question_zh or p.question_en or p.method_zh or p.method_en or p.caveat_zh or p.caveat_en or p.highlight_zh or p.highlight_en or p.summary %}
+          <details class="corpus-details">
+            <summary>Full Question / Method / Limitations &amp; Abstract</summary>
+            {% if p.question_zh %}
+              <p class="corpus-lang-zh{% if p.question_en %} has-en-pair{% endif %}"><strong data-en-label="Research Question">研究问题：</strong>{{ p.question_zh }}</p>
+            {% endif %}
+            {% if p.question_en %}
+              <p class="corpus-lang-en{% if p.question_zh %} has-zh-pair{% endif %}"><strong>Research Question:</strong> {{ p.question_en }}</p>
+            {% endif %}
+            {% if p.method_zh %}
+              <p class="corpus-lang-zh{% if p.method_en %} has-en-pair{% endif %}"><strong data-en-label="Method">研究方法：</strong>{% if p.method_tag %}<span class="ledger-method">[{{ p.method_tag }}]</span> {% endif %}{{ p.method_zh }}</p>
+            {% endif %}
+            {% if p.method_en %}
+              <p class="corpus-lang-en{% if p.method_zh %} has-zh-pair{% endif %}"><strong>Method:</strong> {% if p.method_tag %}<span class="ledger-method">[{{ p.method_tag }}]</span> {% endif %}{{ p.method_en }}</p>
+            {% endif %}
+            {% if p.caveat_zh %}
+              <p class="corpus-lang-zh{% if p.caveat_en %} has-en-pair{% endif %}"><strong data-en-label="Limitations &amp; Next Steps">潜在不足与延伸方向：</strong>{{ p.caveat_zh }}</p>
+            {% endif %}
+            {% if p.caveat_en %}
+              <p class="corpus-lang-en{% if p.caveat_zh %} has-zh-pair{% endif %}"><strong>Limitations &amp; Next Steps:</strong> {{ p.caveat_en }}</p>
+            {% endif %}
+            {% if p.highlight_zh %}
+              <p class="corpus-lang-zh{% if p.highlight_en %} has-en-pair{% endif %}"><strong data-en-label="Highlight">亮点评述：</strong>{{ p.highlight_zh }}</p>
+            {% endif %}
+            {% if p.highlight_en %}
+              <p class="corpus-lang-en{% if p.highlight_zh %} has-zh-pair{% endif %}"><strong>Highlight:</strong> {{ p.highlight_en }}</p>
+            {% endif %}
+            {% if p.summary %}<p class="corpus-abstract-en"><strong>Abstract:</strong> {{ p.summary }}</p>{% endif %}
+          </details>
+        {% endif %}
+
+        {% if p.topic_chips or p.objects %}
+          <div class="corpus-tags">
+            {% for tc in p.topic_chips %}
+              <a class="card-topic-pill" data-topic="{{ tc.slug }}" href="/search?topic={{ tc.slug }}">{{ tc.short }}</a>
+            {% endfor %}
+            {% for obj in p.objects %}
+              <a class="obj-tag" href="/search?q={{ obj | urlencode }}">⌖ {{ obj }}</a>
+            {% endfor %}
+          </div>
+        {% endif %}
+      </article>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="corpus-empty">
+    <p>No matching papers found.</p>
+  </div>
+{% endif %}

@@ -1,0 +1,193 @@
+<div class="corpus-page rollup-page">
+  <header class="corpus-header">
+    <div class="page-heading">
+      <span class="page-head-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 19V11M10 19V5M16 19v-8M20 19H4"/></svg>
+      </span>
+      <div class="page-head-titles">
+        <h2>
+          {%- if rollup.label and ' (' in rollup.label -%}
+            {%- set lead, rest = rollup.label.split(' (', 1) -%}
+            {{ lead }} <span class="rollup-title-sub">({{ rest | replace(' - ', ' – ') }}</span>
+          {%- elif rollup.label and ' · ' in rollup.label -%}
+            {%- set lead, rest = rollup.label.split(' · ', 1) -%}
+            {{ lead }} <span class="rollup-title-sub">· {{ rest }}</span>
+          {%- else -%}
+            {{ rollup.label or 'No period data available' }}
+          {%- endif -%}
+        </h2>
+        <span class="page-head-sep" aria-hidden="true"></span>
+        <p class="page-head-sub">{{ rollup.kind|title }} rollup</p>
+      </div>
+    </div>
+    <div class="rollup-controls">
+      <div class="rollup-kind-tabs" role="tablist" aria-label="Rollup period type">
+        <a class="rollup-tab{% if rollup.kind == 'week' %} is-active{% endif %}" href="/summary?kind=week">Week</a>
+        <a class="rollup-tab{% if rollup.kind == 'month' %} is-active{% endif %}" href="/summary?kind=month">Month</a>
+        <a class="rollup-tab{% if rollup.kind == 'year' %} is-active{% endif %}" href="/summary?kind=year">Year</a>
+      </div>
+
+      {% if rollup.available_keys %}
+        <select class="rollup-key-select"
+                aria-label="Select period"
+                onchange="if (this.value) window.location.href='/summary/{{ rollup.kind }}/' + encodeURIComponent(this.value);">
+          {% for k in rollup.available_keys %}
+            <option value="{{ k }}"{% if k == rollup.key %} selected{% endif %}>{{ k }}</option>
+          {% endfor %}
+        </select>
+      {% endif %}
+
+      <div class="rollup-pager">
+        {% if rollup.prev_key %}
+          <a class="rollup-nav-btn" href="/summary/{{ rollup.kind }}/{{ rollup.prev_key }}">‹ {{ rollup.prev_key }}</a>
+        {% endif %}
+        {% if rollup.next_key %}
+          <a class="rollup-nav-btn" href="/summary/{{ rollup.kind }}/{{ rollup.next_key }}">{{ rollup.next_key }} ›</a>
+        {% endif %}
+      </div>
+    </div>
+  </header>
+
+  <section class="rollup-kpi-grid" aria-label="Period metrics">
+    <div class="kpi-card">
+      <p class="kpi-label">Papers Indexed</p>
+      <p class="kpi-value">{{ rollup.kpis.total_papers }}</p>
+      <p class="kpi-sub">{{ rollup.kpis.accepted_or_published }} accepted / published</p>
+    </div>
+    <div class="kpi-card">
+      <p class="kpi-label">Digested Papers</p>
+      <p class="kpi-value">{{ rollup.kpis.digest_papers }}</p>
+      <p class="kpi-sub">Across {{ rollup.kpis.report_days }} digest days</p>
+    </div>
+    <div class="kpi-card">
+      <p class="kpi-label">★ Today's Highlights</p>
+      <p class="kpi-value">{{ rollup.kpis.highlight_count }}</p>
+      <p class="kpi-sub">Curated standout papers</p>
+    </div>
+    <div class="kpi-card">
+      <p class="kpi-label">Citations Tracked</p>
+      <p class="kpi-value">{{ rollup.kpis.total_citations }}</p>
+      <p class="kpi-sub">{{ rollup.kpis.cited_papers }} cited papers</p>
+    </div>
+  </section>
+
+  {% if rollup.topic_matrix and rollup.topic_matrix.rows %}
+    <section class="rollup-card matrix-card">
+      <div class="rollup-section-head">
+        <h3>Topic × Time Matrix</h3>
+        <span class="rollup-muted">{{ rollup.topic_matrix.rows|length }} active topics <span class="ledger-sep" aria-hidden="true">·</span> {{ rollup.topic_matrix.columns|length }} periods</span>
+      </div>
+      <div class="matrix-scroll">
+        <table class="matrix-table">
+          <thead>
+            <tr>
+              <th scope="col" class="matrix-topic-col">Topic</th>
+              {% for col in rollup.topic_matrix.columns %}
+                <th scope="col"><a href="{{ col.href }}">{{ col.label }}</a></th>
+              {% endfor %}
+              <th scope="col" class="matrix-tot-col">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in rollup.topic_matrix.rows %}
+              <tr>
+                <th scope="row">
+                  <a class="matrix-topic-link" href="{{ row.search_href }}" title="{{ row.label_en or row.label }}">
+                    <span class="card-topic-pill" data-topic="{{ row.slug }}">{{ row.short }}</span>
+                    <span class="matrix-topic-name">{{ row.label_en or row.label }}</span>
+                  </a>
+                </th>
+                {% for cell in row.cells %}
+                  <td class="heat-{{ cell.level }}">{{ cell.count if cell.count > 0 else '·' }}</td>
+                {% endfor %}
+                <td class="matrix-tot-cell">{{ row.total }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  {% endif %}
+
+  <section class="rollup-grid">
+    <article class="rollup-card">
+      <h3>Topic Breakdown</h3>
+      {% if rollup.topic_breakdown %}
+        <div class="topic-bars">
+          {% for t in rollup.topic_breakdown %}
+            <a class="topic-bar-row" href="{{ t.search_href }}" title="{{ t.label_en or t.label }}">
+              <span class="card-topic-pill" data-topic="{{ t.slug }}">{{ t.short }}</span>
+              <span class="topic-bar-track">
+                <span class="topic-bar-fill" data-topic="{{ t.slug }}" style="width: {{ t.pct_of_max }}%;"></span>
+              </span>
+              <span class="topic-bar-val">{{ t.count }}</span>
+            </a>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="rollup-muted">No topic annotations in this period.</p>
+      {% endif %}
+    </article>
+
+    <article class="rollup-card">
+      <h3>Publishing Timeline</h3>
+      {% if rollup.timeline %}
+        <div class="timeline-bars">
+          {% for slot in rollup.timeline %}
+            <a class="timeline-bar-col"
+               href="{{ slot.href }}"
+               title="{{ slot.label }}: {{ slot.total }} papers ({{ slot.digested }} digested)">
+              <span class="timeline-bar-num">{{ slot.total }}</span>
+              <span class="timeline-bar-track">
+                <span class="timeline-bar-fill{% if slot.digested > 0 %} has-digest{% endif %}"
+                      style="height: {{ slot.pct_of_max }}%;"></span>
+              </span>
+              <span class="timeline-bar-lbl">{{ slot.label }}</span>
+            </a>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="rollup-muted">No daily or monthly time-series data yet.</p>
+      {% endif %}
+
+      {% if rollup.method_breakdown %}
+        <h3 class="rollup-subhead">Research Methods</h3>
+        <div class="rollup-chips-row">
+          {% for m in rollup.method_breakdown %}
+            <a class="obj-tag" href="{{ m.search_href }}">{{ m.method }} · {{ m.count }} ({{ m.pct }}%)</a>
+          {% endfor %}
+        </div>
+      {% endif %}
+
+      {% if rollup.top_objects %}
+        <h3 class="rollup-subhead">Top Astrophysical Objects</h3>
+        <div class="rollup-chips-row">
+          {% for obj in rollup.top_objects %}
+            <a class="obj-tag" href="{{ obj.href }}">⌖ {{ obj.name }} ({{ obj.count }})</a>
+          {% endfor %}
+        </div>
+      {% endif %}
+    </article>
+  </section>
+
+  <section class="rollup-section">
+    <div class="rollup-section-head">
+      <h3>Top Cited Papers</h3>
+      <a class="tool-reset-link" href="/search?sort=citations">Browse all by citations &rarr;</a>
+    </div>
+    {% if rollup.top_cited %}
+      {% set items = rollup.top_cited %}
+      {% include 'partials/paper_card_list.html' %}
+    {% else %}
+      <p class="rollup-muted">No citation counts in this period yet. Run <code>python citations.py refresh --days 30 --rerender</code> to fetch NASA SciX / INSPIRE-HEP metrics.</p>
+    {% endif %}
+  </section>
+
+  <section class="rollup-section">
+    <div class="rollup-section-head">
+      <h3>★ Period Highlights ({{ rollup.highlights_total }})</h3>
+    </div>
+    {% set items = rollup.highlights %}
+    {% include 'partials/paper_card_list.html' %}
+  </section>
+</div>

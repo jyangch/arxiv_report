@@ -1,0 +1,60 @@
+<div class="corpus-page">
+  <header class="corpus-header">
+    <div class="page-heading">
+      <span class="page-head-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8.3 10.9l7.4-3.8M8.3 13.1l7.4 3.8"/></svg>
+      </span>
+      <div class="page-head-titles">
+        <h2>Similar Papers</h2>
+        <span class="page-head-sep" aria-hidden="true"></span>
+        <p class="page-head-sub">arXiv:{{ arxiv_id }}</p>
+      </div>
+    </div>
+    <p class="corpus-stats-line">
+      {{ result['items']|length }} similar · {{ result.elapsed_ms }} ms
+    </p>
+  </header>
+
+  {% if result.seed %}
+    <div class="seed-box">
+      <div class="seed-label">Seed paper</div>
+      <div class="seed-head">
+        {% if result.seed.report_href %}
+          <a class="meta-pill meta-report-link" href="{{ result.seed.report_href }}">{{ result.seed.report_date }} · #{{ result.seed.number }}</a>
+        {% elif result.seed.report_date %}
+          <span class="meta-pill">{{ result.seed.report_date }}</span>
+        {% endif %}
+        <a class="meta-arxiv-id" href="{{ result.seed.url }}" target="_blank" rel="noopener noreferrer">arXiv:{{ result.seed.arxiv_id }}</a>
+      </div>
+      {% if result.seed.title_zh %}
+        <h3 class="corpus-lang-zh{% if result.seed.title %} has-en-pair{% endif %}">{{ result.seed.title_zh }}</h3>
+      {% endif %}
+      {% if result.seed.title %}
+        <p class="corpus-title-en corpus-lang-en{% if result.seed.title_zh %} has-zh-pair{% endif %}">{{ result.seed.title }}</p>
+      {% endif %}
+      {% if result.seed.result_zh %}
+        {% set has_seed_en = result.seed.result_en or result.seed.summary %}
+        <p class="corpus-summary corpus-lang-zh{% if has_seed_en %} has-en-pair{% endif %}"><strong>研究结果：</strong>{{ result.seed.result_zh }}</p>
+      {% endif %}
+      {% if result.seed.result_en %}
+        <p class="corpus-summary corpus-lang-en{% if result.seed.result_zh %} has-zh-pair{% endif %}"><strong>Results:</strong> {{ result.seed.result_en }}</p>
+      {% elif result.seed.result_zh and result.seed.summary %}
+        <p class="corpus-summary corpus-lang-en has-zh-pair"><strong>Abstract:</strong> {{ result.seed.summary[:340] }}{% if result.seed.summary|length > 340 %}...{% endif %}</p>
+      {% endif %}
+    </div>
+
+    <div class="pill-tabs" aria-label="Time window">
+      {% for w_days, w_label in [(0, 'All dates'), (30, 'Last 30d'), (90, 'Last 90d'), (180, 'Last 180d')] %}
+        <a class="pill-tab{% if days == w_days %} is-active{% endif %}" href="/similar/{{ result.seed.pid }}?days={{ w_days }}">{{ w_label }}</a>
+      {% endfor %}
+    </div>
+
+    {% set items = result['items'] %}
+    {% include 'partials/paper_card_list.html' %}
+  {% else %}
+    <div class="corpus-empty">
+      <p><code>{{ arxiv_id }}</code> was not found in the corpus.</p>
+      <p><a href="/search">Browse corpus search &rarr;</a></p>
+    </div>
+  {% endif %}
+</div>

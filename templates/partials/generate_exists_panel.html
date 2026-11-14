@@ -1,0 +1,17 @@
+<div class="corpus-page">
+  <div class="corpus-empty">
+    <h3>Digest for {{ date }} Already Exists</h3>
+    <p>A daily digest for <strong>{{ date }}</strong> is already archived. Open the existing report or confirm below if you want to regenerate and overwrite it.</p>
+    <div style="display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 14px;">
+      <a class="btn-primary" href="/r/{{ date }}">Open Existing Digest &rarr;</a>
+      <button type="button"
+              class="tool-btn"
+              hx-post="/generate"
+              hx-vals='{"date": "{{ date }}", "force": "1"}'
+              hx-target="#main-area"
+              hx-swap="innerHTML">
+        Regenerate &amp; Overwrite
+      </button>
+    </div>
+  </div>
+</div>

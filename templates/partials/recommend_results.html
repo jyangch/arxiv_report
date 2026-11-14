@@ -1,0 +1,44 @@
+{% if rec %}
+  <div class="recommend-meta-bar">
+    <span>
+      Model: <strong>{{ rec.mode|upper }}</strong> <span class="ledger-sep" aria-hidden="true">·</span>
+      {{ rec.matched_positives }} / {{ rec.total_positives }} positive papers matched <span class="ledger-sep" aria-hidden="true">·</span>
+      {{ rec.elapsed_ms }} ms
+    </span>
+  </div>
+
+  {% if rec.top_positive_features or rec.top_negative_features %}
+    <details class="profile-box">
+      <summary>Interest Profile (Top Positive / Negative Features)</summary>
+      <div class="profile-cols">
+        <div>
+          <h4>Positive signals (+)</h4>
+          <div class="profile-chips">
+            {% for f in rec.top_positive_features %}
+              <span class="profile-chip pos">{{ f.term }} <small>{{ '%+.2f'|format(f.weight) }}</small></span>
+            {% endfor %}
+          </div>
+        </div>
+        {% if rec.top_negative_features %}
+          <div>
+            <h4>Down-weighted (-)</h4>
+            <div class="profile-chips">
+              {% for f in rec.top_negative_features %}
+                <span class="profile-chip neg">{{ f.term }} <small>{{ '%+.2f'|format(f.weight) }}</small></span>
+              {% endfor %}
+            </div>
+          </div>
+        {% endif %}
+      </div>
+    </details>
+  {% endif %}
+
+  {% if rec.matched_positives == 0 %}
+    <div class="corpus-empty">
+      <p>No positive papers available yet. Star a few papers in daily digests or search results{% if not visitor_mode %} (or save them to Obsidian){% endif %}, then return here for personalized recommendations.</p>
+    </div>
+  {% else %}
+    {% set items = rec['items'] %}
+    {% include 'partials/paper_card_list.html' %}
+  {% endif %}
+{% endif %}

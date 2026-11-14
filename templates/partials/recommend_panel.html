@@ -1,0 +1,82 @@
+<div class="corpus-page">
+  <header class="corpus-header">
+    <div class="page-heading">
+      <span class="page-head-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 3l2.2 6.8L21 12l-6.8 2.2L12 21l-2.2-6.8L3 12l6.8-2.2z"/></svg>
+      </span>
+      <div class="page-head-titles">
+        <h2>Recommended Papers</h2>
+        <span class="page-head-sep" aria-hidden="true"></span>
+        <p class="page-head-sub">Personalized ranking</p>
+      </div>
+    </div>
+    {% if visitor_mode %}
+      <p class="corpus-stats-line">Browser local stars</p>
+    {% else %}
+      <p class="corpus-stats-line">
+        Starred ({{ pos_info.starred_count }}) + Obsidian ({{ pos_info.obsidian_count }}) &rarr; {{ pos_info.combined_count }} unique
+      </p>
+    {% endif %}
+  </header>
+
+  <div class="recommend-controls">
+    <div class="pill-tabs" aria-label="Time window">
+      {% for w_days, w_label in [(7, '7d'), (14, '14d'), (30, '30d'), (90, '90d'), (0, 'All')] %}
+        <a class="pill-tab{% if days == w_days %} is-active{% endif %}"
+           href="/recommend?source={{ source }}&days={{ w_days }}&exclude={{ 1 if exclude else 0 }}">{{ w_label }}</a>
+      {% endfor %}
+    </div>
+
+    {% if can_write %}
+      <div class="pill-tabs" aria-label="Positive training source">
+        {% for s_val, s_lbl in [('all', 'Starred + Obsidian'), ('starred', 'Starred only'), ('obsidian', 'Obsidian only'), ('browser', 'This Browser')] %}
+          <a class="pill-tab{% if source == s_val %} is-active{% endif %}"
+             href="/recommend?source={{ s_val }}&days={{ days }}&exclude={{ 1 if exclude else 0 }}">{{ s_lbl }}</a>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    <a class="pill-tab{% if not exclude %} is-active{% endif %}"
+       href="/recommend?source={{ source }}&days={{ days }}&exclude={{ 0 if exclude else 1 }}">
+      {% if exclude %}Hiding already starred{% else %}Including already starred{% endif %}
+    </a>
+  </div>
+
+  <div id="recommend-results">
+    {% if visitor_mode %}
+      <div class="corpus-empty"><p>Loading your browser stars and computing personalized recommendations...</p></div>
+    {% else %}
+      {% include 'partials/recommend_results.html' %}
+    {% endif %}
+  </div>
+</div>
+
+{% if visitor_mode %}
+<script>
+(function() {
+  var pids = window.collectBrowserStarredPids ? window.collectBrowserStarredPids() : [];
+  fetch('/api/recommend/cards', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      pids: pids,
+      days: {{ days }},
+      exclude_positives: {{ 'true' if exclude else 'false' }},
+      limit: 60
+    })
+  }).then(function(r) {
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.text();
+  }).then(function(html) {
+    var box = document.getElementById('recommend-results');
+    if (box) {
+      box.innerHTML = html;
+      if (window.syncCorpusCards) window.syncCorpusCards();
+    }
+  }).catch(function(err) {
+    var box = document.getElementById('recommend-results');
+    if (box) box.innerHTML = '<div class="corpus-empty"><p>Failed to compute recommendations: ' + err.message + '</p></div>';
+  });
+})();
+</script>
+{% endif %}

@@ -22,7 +22,7 @@ line-ending = "auto"
 select = ["E", "W", "F", "I", "UP", "B", "SIM", "RUF"]
 ignore = ["E501", "RUF001", "RUF002", "RUF003"]
 fixable = ["ALL"]
-unfixable = ["F841", "F601", "F811", "B006",  "RUF100"]
+unfixable = ["F841", "F601", "F811", "B006", "RUF100"]
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401", "I001"]

@@ -1,0 +1,67 @@
+<div class="corpus-page">
+  <header class="corpus-header">
+    <div class="page-heading">
+      <span class="page-head-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5" stroke-linecap="round"/></svg>
+      </span>
+      <div class="page-head-titles">
+        <h2>Search Corpus</h2>
+        <span class="page-head-sep" aria-hidden="true"></span>
+        <p class="page-head-sub">Cross-day bilingual archive</p>
+      </div>
+    </div>
+    <p class="corpus-stats-line">
+      {{ result.total }} matches · {{ result.elapsed_ms }} ms
+    </p>
+  </header>
+
+  <form class="filter-bar" action="/search" method="get">
+    <input class="filter-query"
+           type="search"
+           name="q"
+           value="{{ result.query }}"
+           placeholder="Search titles, abstracts, results, authors, or objects (e.g., EP240414a, magnetar, jet)..."
+           autocomplete="off" />
+
+    <select name="days" aria-label="Time window">
+      <option value="0"{% if days == 0 %} selected{% endif %}>All dates</option>
+      <option value="7"{% if days == 7 %} selected{% endif %}>Last 7d</option>
+      <option value="30"{% if days == 30 %} selected{% endif %}>Last 30d</option>
+      <option value="90"{% if days == 90 %} selected{% endif %}>Last 90d</option>
+      <option value="180"{% if days == 180 %} selected{% endif %}>Last 180d</option>
+    </select>
+
+    <select name="topic" aria-label="Topic">
+      <option value="">All topics</option>
+      {% for t in topics %}
+        <option value="{{ t.slug }}"{% if topic == t.slug %} selected{% endif %}>{{ t.short }}</option>
+      {% endfor %}
+    </select>
+
+    <select name="method" aria-label="Method">
+      <option value="">All methods</option>
+      {% for m in ('Observation', 'Modeling', 'Simulation', 'Theory') %}
+        <option value="{{ m }}"{% if method|lower == m|lower %} selected{% endif %}>{{ m }}</option>
+      {% endfor %}
+    </select>
+
+    <select name="status" aria-label="Status">
+      <option value="">All status</option>
+      {% for s in ('published', 'accepted', 'submitted') %}
+        <option value="{{ s }}"{% if status|lower == s %} selected{% endif %}>{{ s|title }}</option>
+      {% endfor %}
+    </select>
+
+    <select name="sort" aria-label="Sort">
+      <option value="relevance"{% if sort == 'relevance' %} selected{% endif %}>Relevance</option>
+      <option value="date"{% if sort == 'date' %} selected{% endif %}>Newest</option>
+      <option value="citations"{% if sort == 'citations' %} selected{% endif %}>Most cited</option>
+    </select>
+
+    <button class="btn-primary filter-submit" type="submit">Search</button>
+    <a class="tool-reset-link" href="/search">Reset</a>
+  </form>
+
+  {% set items = result['items'] %}
+  {% include 'partials/paper_card_list.html' %}
+</div>

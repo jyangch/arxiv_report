@@ -1,6 +1,8 @@
 """LLM provider clients, individual generators, and the fallback dispatcher."""
 
+from collections.abc import Callable
 import json
+import math
 import os
 from pathlib import Path
 import shutil
@@ -22,11 +24,13 @@ from core.config import (
     GEMINI_API_KEY,
     GEMINI_BACKEND,
     GEMINI_MODEL,
+    MAX_PAPERS_PER_CHUNK,
     OPENAI_API_KEY,
     OPENAI_BACKEND,
     OPENAI_MODEL,
     PREFERRED_PROVIDER,
 )
+from core.fragments import merge_chunk_fragments
 from core.prompt import build_prompt
 
 claude_client = anthropic.Anthropic(api_key=CLAUDE_API_KEY) if CLAUDE_API_KEY else None
@@ -52,6 +56,47 @@ def _is_quota_error(error: Exception) -> bool:
     """Heuristic check for 429 / quota / rate-limit errors across SDK conventions."""
     msg = str(error).lower()
     return ('429' in msg) or ('resource_exhausted' in msg) or ('quota exceeded' in msg)
+
+
+def _is_output_limit_error(error: Exception) -> bool:
+    """Return True if an exception indicates the LLM output token limit was hit."""
+    msg = str(error).lower()
+    return any(
+        needle in msg
+        for needle in (
+            'output token limit',
+            'max_output_tokens',
+            'maximum output',
+            'length_limit',
+            'exceeded the output token',
+        )
+    )
+
+
+def _provider_model_name(provider: str) -> str:
+    """Return the configured model identifier for ``provider``."""
+    return {
+        'gemini': GEMINI_MODEL,
+        'claude': CLAUDE_MODEL,
+        'openai': OPENAI_MODEL,
+    }.get(provider, '')
+
+
+def _split_into_batches(total: int, max_per_chunk: int) -> list[tuple[int, int]]:
+    """Split ``total`` items into balanced ``(offset, count)`` slices."""
+    if total <= 0:
+        return []
+    if max_per_chunk <= 0 or total <= max_per_chunk:
+        return [(0, total)]
+    num_chunks = math.ceil(total / max_per_chunk)
+    base, rem = divmod(total, num_chunks)
+    batches: list[tuple[int, int]] = []
+    offset = 0
+    for idx in range(num_chunks):
+        count = base + (1 if idx < rem else 0)
+        batches.append((offset, count))
+        offset += count
+    return batches
 
 
 def _generate_with_claude_api(prompt: str) -> str:
@@ -391,15 +436,70 @@ _GENERATORS = {
 }
 
 
-def generate_report(papers: list[dict]) -> tuple[str, str]:
-    """Build the prompt and dispatch to LLM providers in fallback order.
+def _generate_slice(
+    generate_fn: Callable[[str], str],
+    slice_papers: list[dict],
+    start_index: int,
+    max_highlights: int,
+    emit: Callable[[str], None],
+    depth: int = 0,
+) -> str:
+    """Generate one slice, automatically bisecting if output exceeds token limits."""
+    prompt = build_prompt(
+        slice_papers,
+        start_index=start_index,
+        max_highlights=max_highlights,
+    )
+    try:
+        return generate_fn(prompt)
+    except Exception as exc:
+        if _is_output_limit_error(exc) and len(slice_papers) > 1:
+            mid = len(slice_papers) // 2
+            end_index = start_index + len(slice_papers) - 1
+            emit(
+                f'   [split d={depth + 1}] output limit hit on papers {start_index}-{end_index}; '
+                f'bisecting into {mid} + {len(slice_papers) - mid}...'
+            )
+            left_html = _generate_slice(
+                generate_fn,
+                slice_papers[:mid],
+                start_index,
+                max_highlights,
+                emit,
+                depth + 1,
+            )
+            right_html = _generate_slice(
+                generate_fn,
+                slice_papers[mid:],
+                start_index + mid,
+                max_highlights,
+                emit,
+                depth + 1,
+            )
+            return merge_chunk_fragments(
+                [
+                    (start_index, mid, left_html),
+                    (start_index + mid, len(slice_papers) - mid, right_html),
+                ],
+                max_highlights=max_highlights,
+            )
+        raise
 
-    The preferred provider is tried first; on quota / rate-limit errors the
-    dispatcher falls through to the next provider in ``FALLBACK_ORDER``.
+
+def generate_report(
+    papers: list[dict],
+    on_progress: Callable[[str], None] | None = None,
+) -> tuple[str, str]:
+    """Build prompts and dispatch to LLM providers in fallback order.
+
+    Large paper lists above ``MAX_PAPERS_PER_CHUNK`` are split into balanced
+    chunks, with automatic bisection if an individual slice hits an output
+    token ceiling.
 
     Args:
         papers: Papers from ``fetch_arxiv_papers``; an empty list short-circuits
             to a placeholder HTML fragment.
+        on_progress: Optional callback invoked with status lines during batching.
 
     Returns:
         A pair ``(report_html, provider)``: the LLM-generated HTML body
@@ -411,25 +511,59 @@ def generate_report(papers: list[dict]) -> tuple[str, str]:
     if not papers:
         return 'No new papers today.</p>', ''
 
-    prompt = build_prompt(papers)
+    def _emit(msg: str) -> None:
+        print(msg)
+        if on_progress is not None:
+            on_progress(msg)
+
+    batches = _split_into_batches(len(papers), MAX_PAPERS_PER_CHUNK)
+    per_chunk_highlights = 2 if len(batches) > 1 else 3
 
     providers = [PREFERRED_PROVIDER] + [p for p in FALLBACK_ORDER if p != PREFERRED_PROVIDER]
-    print(f'🧠 Preferred provider: {providers[0]}. Generating report...')
+    print(f'🧠 Preferred provider: {providers[0]}. Generating report ({len(papers)} papers)...')
 
     last_error: Exception | None = None
     for i, provider in enumerate(providers):
         label, generate = _GENERATORS[provider]
+        model_name = _provider_model_name(provider)
+        tag = f'{label} ({model_name})' if model_name else label
         try:
-            print(f'   Trying {label}...')
-            return generate(prompt), provider
+            _emit(f'   Trying {tag} in {len(batches)} batch(es)...')
+            if len(batches) == 1:
+                result_html = _generate_slice(
+                    generate,
+                    papers,
+                    1,
+                    per_chunk_highlights,
+                    _emit,
+                )
+                return result_html, provider
+
+            chunk_outputs: list[tuple[int, int, str]] = []
+            for b_idx, (offset, count) in enumerate(batches, start=1):
+                start_index = offset + 1
+                end_index = offset + count
+                _emit(
+                    f'   [{provider}/{model_name or label}] batch {b_idx}/{len(batches)} '
+                    f'(papers {start_index}-{end_index})...'
+                )
+                chunk_html = _generate_slice(
+                    generate,
+                    papers[offset : offset + count],
+                    start_index,
+                    per_chunk_highlights,
+                    _emit,
+                )
+                chunk_outputs.append((start_index, count, chunk_html))
+            return merge_chunk_fragments(chunk_outputs, max_highlights=3), provider
         except Exception as e:
             last_error = e
             next_provider = providers[i + 1] if i + 1 < len(providers) else None
             if _is_quota_error(e) and next_provider:
-                print(
+                _emit(
                     f'⚠️ {provider} quota/rate limit hit, falling back to {next_provider}. Details: {e}'
                 )
                 continue
-            print(f'⚠️ {provider} failed: {e}')
+            _emit(f'⚠️ {provider} failed: {e}')
 
     raise RuntimeError(f'All providers failed. Last error: {last_error}')

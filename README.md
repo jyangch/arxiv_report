@@ -1,39 +1,54 @@
-# arXiv High-Energy Astrophysics Daily Report Generator
+# arXiv High-Energy Astrophysics Daily Digest
 
-Automatically fetches the latest papers from the arXiv `astro-ph.HE` (High Energy Astrophysical Phenomena) category, uses a large language model to generate a structured academic digest, and exports it as an HTML report. Ships with a CLI for cron / one-off runs and a FastAPI + HTMX web UI for browsing past reports and triggering new ones interactively.
+Automatically fetches new papers from arXiv `astro-ph.HE` (High Energy Astrophysical Phenomena), synthesizes structured **bilingual (Chinese + English)** digests using a large language model, indexes every paper into a persistent local corpus for cross-day search and personalized recommendations, and serves an interactive **FastAPI + HTMX** web workspace alongside CLI tools and a privacy-safe static site exporter.
 
 ## Features
 
-- Fetches newly submitted papers based on arXiv's submission sync window (US Eastern Time)
-- Supports arbitrary historical dates via arXiv's `submittedDate` range query
-- Classifies papers by research topic (GRBs, black holes, supernovae, cosmic rays, ...)
-- Generates Chinese-language summaries with method tags and key physical findings
-- Multi-provider LLM dispatch: Antigravity CLI (`agy`, Gemini Argon subscription) by default, with optional Claude (CLI or API) and OpenAI (Codex CLI or API) fallback
-- Self-contained styled HTML reports (light / dark adaptive, internal anchor scrolling)
-- FastAPI + HTMX web UI: per-date URLs, sidebar history, live SSE progress
-- Per-paper "Save to Obsidian" button: writes a formatted Markdown note (plus optional personal note) directly into the local Obsidian vault folder in the background
-- Starred / Obsidian marks are saved server-side in `reports/paper_state.json`, so the Starred paper list survives cleared browser data
+- **Resilient arXiv Ingestion**: Fetches today's submissions via the `astro-ph.HE` pastweek listing, supports arbitrary historical dates via arXiv's `submittedDate` range query, falls back to RSS when needed, detects US holidays / weekend deferrals, and enforces HTTP 429 cooldown guards.
+- **Bilingual Structured Digests (`中 / EN`)**: Generates Today's Highlights, bilingual titles, Research Question, Method tags (`Observation` / `Simulation` / `Theory` / `Modeling`), Findings, and Limitations & Future Directions, with an instant topbar `中 / EN` language switch while keeping UI chrome in English.
+- **16-Topic Taxonomy & Object Badges**: Classifies papers across a canonical 16-topic ontology (`GRB`, `FXT/EP`, `FRB`, `SNe/KN`, `TDE/QPE`, `NS/PSR`, `XRB/WD`, `GW`, `BH/GR`, `AGN`, `SNR/ICM`, `VHE`, `CR/ν`, `DM/ALP`, `Plasma`, `Inst/ML`) with light/dark topic chips and deterministic astrophysical designation badges (`GRB`, `EP`, `FRB`, `GW`, `PSR`, `4FGL`, `AT`, `SN`, ...).
+- **Multi-Provider LLM Dispatch**: Defaults to the Antigravity CLI (`agy`, `gemini-4-hydrogen-high`) with automatic chunking (`MAX_PAPERS_PER_CHUNK=25`) and bisection recovery on oversized prompts, plus optional Gemini API SDK, Claude (Code CLI or API), and OpenAI (Codex CLI or API) backends.
+- **Unified Topbar Web UI (FastAPI + HTMX)**:
+  - Single unified header across `/r/{date}`, `/summary`, `/recommend`, `/search`, `/similar/{arxiv_id}`, and `/starred` with a synced Light / Dark theme toggle.
+  - `Day / Week / Month / Year` dimension switcher, interactive calendar popover, and `+ Generate` popover with live SSE progress and existing-report overwrite guard.
+  - Global search input (`/` keyboard shortcut), `Recommend`, `Starred`, and bilingual `中 / EN` toggle.
+- **Cross-Day Corpus, Similarity & Recommendations**: Stores bilingual digests in SQLite (`./reports/.data/papers.db`) with cached TF-IDF + metadata features (`features.pkl`) powering `/search`, `/similar/{arxiv_id}`, and `LinearSVC` personalized ranking (`/recommend`) over `Starred` papers and local Obsidian notes (`7d / 14d / 30d / 90d / All` windows and source filters).
+- **Citations & Period Rollups**: Queries NASA SciX / ADS (`SCIX_API_TOKEN`) with automatic zero-token INSPIRE-HEP fallback (`citations.py`), adds `Cited N` / `SciX` badges and `Most cited` sorting, and renders Week / Month / Year rollups (`/summary`) with Topic × Time heatmaps and top highlights.
+- **Obsidian Integration & Zero-LLM Re-rendering**: Per-paper `Save to Obsidian` writes clean Markdown notes into your local vault without overwriting existing bodies or deleting files on unmark, persists state server-side in `reports/paper_state.json`, and keeps HTML fragments decoupled under `reports/fragments/` for zero-LLM full-history layout re-rendering.
+- **LAN Group Sharing & Static Export**: Supports read-only LAN visitors with per-browser `localStorage` stars/recommendations and owner `/unlock` (`ALLOWED_NETS`, `UI_TOKEN`), or exporting a privacy-safe static SPA (`build_site.py`) ready for GitHub Pages, Cloudflare Pages, or Nginx.
 
-## Project layout
+## Project Layout
 
-```
+```text
 .
-├── server.py              FastAPI app, routes, background worker, SSE stream
-├── report.py              CLI entry (cron / one-off)
-├── core/                  domain package
-│   ├── fetcher.py           arXiv API + RSS fallback
-│   ├── obsidian.py          Obsidian Markdown renderer and safe vault writer
-│   ├── paper_state.py       server-side starred / Obsidian store
-│   ├── providers.py         Claude / Gemini / OpenAI clients + fallback dispatcher
-│   ├── prompt.py            prompt builder
-│   ├── pub_status.py        publication-status classifier
-│   ├── render.py            standalone HTML wrapper
-│   └── config.py            env vars + defaults
-├── templates/             Jinja2 base + partials for the web UI
-├── static/style.css       sidebar + main chrome
-├── static/paper_state.js  syncs starred / Obsidian marks and upgrades historical reports
-├── tests/                 pytest suite (31 cases)
-└── reports/               generated daily reports (gitignored)
+├── server.py              FastAPI web UI, LAN auth guard, /search, /similar, /recommend, /summary, SSE
+├── report.py              CLI entry point for single-day or cron daily digest generation
+├── sanity.py              CLI for corpus bootstrap, stats, search, similarity, recommendations, and rerender
+├── citations.py           CLI for SciX / INSPIRE-HEP citation refresh, status, and top cited papers
+├── build_site.py          CLI for privacy-safe static HTML + client search bundle (./dist/site)
+├── core/                  Domain package (`__version__ = '0.3.0'`)
+│   ├── citations.py       NASA SciX / ADS + INSPIRE-HEP batch citation client and SQLite cache
+│   ├── config.py          Environment variable defaults and runtime configuration
+│   ├── corpus.py          Persistent bilingual SQLite corpus & topic migration
+│   ├── features.py        Cached TF-IDF + author + topic/object feature matrix
+│   ├── fetcher.py         arXiv pastweek/API + RSS fetcher with holiday/cooldown tracking
+│   ├── fragments.py       Decoupled HTML body fragment parser, sanitizer, and validator
+│   ├── objects.py         Deterministic astrophysical transient/source designation extractor
+│   ├── obsidian.py        Obsidian Markdown renderer and safe vault note writer
+│   ├── paper_state.py     Server-side Starred / Obsidian mark store (`reports/paper_state.json`)
+│   ├── prompt.py          Bilingual structured digest prompt builder
+│   ├── providers.py       Gemini (`agy`/API), Claude (CLI/API), OpenAI (Codex/API) dispatcher
+│   ├── pub_status.py      Accepted / Published / Submitted status classifier
+│   ├── render.py          Standalone HTML digest + Starred page renderer & historical re-renderer
+│   ├── rollups.py         Week / Month / Year rollup statistics and Topic × Time matrices
+│   ├── sanity.py          Cross-day search, similarity engine, and LinearSVC recommender
+│   ├── site_builder.py    Static HTML exporter + client-side `search_index.json` SPA builder
+│   └── topics.py          16-topic canonical ontology + light/dark chip palette
+├── templates/             Jinja2 base shell (`base.html`, `home.html`) and HTMX partials
+├── static/                `style.css`, `ui_shell.js` (topbar/calendar/generate/lang), `paper_state.js`
+├── docs/                  Setup and coding guides (`launchagent-setup.md`, `docstring-standard.md`)
+├── tests/                 Pytest suite (35 tests across 10 test modules, gitignored)
+└── reports/               Generated HTML digests, `fragments/`, `paper_state.json`, `.data/` (gitignored)
 ```
 
 ## Installation
@@ -42,95 +57,102 @@ Automatically fetches the latest papers from the arXiv `astro-ph.HE` (High Energ
 pip install -r requirements.txt
 ```
 
-For the default Gemini backend, install the Antigravity CLI (`agy`) and log in once with `agy` (uses your Gemini subscription). For the optional Claude backend, install Claude Code and log in once with `claude` (uses your Claude Pro/Max subscription). For the optional ChatGPT/Codex backend, install the Codex CLI and log in once with `codex login`.
+For the default Gemini CLI backend, install the Antigravity CLI (`agy`) and authenticate once. Optional fallback backends use Claude Code (`claude`) or Codex CLI (`codex login`), or standard SDK API keys (`GEMINI_API_KEY`, `CLAUDE_API_KEY`, `OPENAI_API_KEY`).
 
 ## Configuration
 
-Set API keys, models, and provider backends via environment variables (all optional, defaults provided):
+All settings are configured via environment variables (sensible defaults are provided in `core/config.py`):
 
 | Variable | Description | Default |
 |---|---|---|
 | `PREFERRED_PROVIDER` | Preferred LLM provider: `gemini`, `claude`, or `openai` | `gemini` |
-| `FALLBACK_ORDER` | Comma-separated fallback order | `gemini` |
-| `GEMINI_BACKEND` | `cli` (consumes Gemini subscription via `agy`) or `api` (consumes API credits) | `cli` |
-| `GEMINI_API_KEY` | Google Gemini API key -- only needed when `GEMINI_BACKEND=api` | — |
-| `GEMINI_MODEL` | Gemini / `agy` model name | `gemini-4-argon-high` |
-| `AGY_CLI` | Optional absolute path to the `agy` CLI | auto-detected |
-| `OPENAI_BACKEND` | `codex` (consumes ChatGPT/Codex subscription via Codex CLI) or `api` (consumes API credits) | `codex` |
-| `OPENAI_API_KEY` | OpenAI API key -- only needed when `OPENAI_BACKEND=api` | — |
-| `OPENAI_MODEL` | OpenAI/Codex model name | `gpt-5.5` |
-| `CODEX_CLI` | Optional absolute path to the Codex CLI; otherwise the ChatGPT-bundled CLI is preferred when available | auto-detected |
-| `CLAUDE_BACKEND` | `cli` (consumes Max quota via Claude Code) or `api` (consumes API credits) | `cli` |
-| `CLAUDE_API_KEY` | Anthropic Claude API key -- only needed when `CLAUDE_BACKEND=api` | — |
-| `CLAUDE_MODEL` | Claude model name (API backend only) | `claude-opus-4-6` |
-| `OBSIDIAN_VAULT_PATH` | Local Obsidian vault root path for "Save to Obsidian" | `/Users/junyang/Documents/Obsidian/astro` |
-| `OBSIDIAN_ARXIV_FOLDER` | Subfolder inside the Obsidian vault where paper notes are written | `Arxiv Notes` |
-
-The Claude CLI backend always uses the `opus` model alias (hardcoded in `core/providers.py`). The preferred LLM provider can be set with `PREFERRED_PROVIDER` (`"gemini"`, `"claude"`, or `"openai"`). Defaults to `"gemini"`.
-
-By default, no fallback provider is attempted, so a normal run only consumes the logged-in Gemini subscription. To switch back to Claude or ChatGPT/Codex, set `PREFERRED_PROVIDER=claude FALLBACK_ORDER=claude` or `PREFERRED_PROVIDER=openai FALLBACK_ORDER=openai`; to enable multi-provider fallback, set for example `FALLBACK_ORDER=gemini,claude,openai`.
+| `FALLBACK_ORDER` | Comma-separated provider fallback order | `gemini` |
+| `GEMINI_BACKEND` | `cli` (via `agy`) or `api` (`google-genai` SDK) | `cli` |
+| `GEMINI_API_KEY` | Google Gemini API key (when `GEMINI_BACKEND=api`) | `—` |
+| `GEMINI_MODEL` | Gemini / `agy` model name | `gemini-4-hydrogen-high` |
+| `AGY_CLI` | Optional absolute path to `agy` CLI | auto-detected |
+| `MAX_PAPERS_PER_CHUNK` | Max papers per chunk during CLI/SDK generation | `25` |
+| `OPENAI_BACKEND` | `codex` (Codex CLI) or `api` (OpenAI SDK) | `codex` |
+| `OPENAI_API_KEY` | OpenAI API key (when `OPENAI_BACKEND=api`) | `—` |
+| `OPENAI_MODEL` | OpenAI / Codex model name | `gpt-5.5` |
+| `CODEX_CLI` | Optional absolute path to Codex CLI | auto-detected |
+| `CLAUDE_BACKEND` | `cli` (Claude Code) or `api` (Anthropic SDK) | `cli` |
+| `CLAUDE_API_KEY` | Anthropic Claude API key (when `CLAUDE_BACKEND=api`) | `—` |
+| `CLAUDE_MODEL` | Claude model name (API backend) | `claude-opus-4-6` |
+| `OBSIDIAN_VAULT_PATH` | Local Obsidian vault root path | `/Users/junyang/Documents/Obsidian/astro` |
+| `OBSIDIAN_ARXIV_FOLDER` | Target subfolder inside Obsidian vault | `Arxiv-Notes` |
+| `ARXIV_DATA_DIR` | Directory for `papers.db` and `features.pkl` | `./reports/.data` |
+| `ALLOWED_NETS` | Comma-separated IP/CIDR allowlist for incoming requests | `—` |
+| `UI_TOKEN` | Owner unlock token enabling write operations from non-local clients | `—` |
+| `SCIX_API_TOKEN` | Optional NASA SciX / ADS bearer token (INSPIRE-HEP fallback when unset) | `—` |
+| `SCIX_API_URL` | NASA SciX / ADS query endpoint | `https://api.adsabs.harvard.edu/v1/search/query` |
+| `SITE_OUTPUT_DIR` | Output directory for static site exports (`build_site.py`) | `./dist/site` |
+| `SITE_TITLE` | Title displayed on exported static site pages | `Daily Digest` |
 
 ## Usage
-
-### CLI
-
-```bash
-# Default: today's report via Antigravity CLI (Gemini Argon subscription)
-python report.py
-
-# Generate a report for any historical date (uses arXiv's submittedDate range query)
-python report.py --date 2026-03-15
-
-# Switch Gemini to the API SDK:
-export GEMINI_BACKEND=api
-export GEMINI_API_KEY="your_api_key_here"
-export GEMINI_MODEL="gemini-3.1-flash-lite-preview"
-python report.py
-
-# Switch Claude to the API SDK:
-export CLAUDE_BACKEND=api
-export CLAUDE_API_KEY="your_api_key_here"
-python report.py
-
-# Switch OpenAI to the API SDK:
-export OPENAI_BACKEND=api
-export OPENAI_API_KEY="your_api_key_here"
-python report.py
-```
 
 ### Web UI (FastAPI + HTMX)
 
 ```bash
-pip install -r requirements.txt
-uvicorn server:app --reload --port 8080
+uvicorn server:app --port 8080
 ```
 
-Then open http://localhost:8080. The home page redirects to the most recent report on disk; click a date in the sidebar to switch, or pick a fresh date and click **Generate report** to spawn a background generation task with live SSE progress.
+Open <http://localhost:8080> to jump to the latest digest on disk. Use the top bar to switch between `Day / Week / Month / Year` views, open the calendar picker, run full-corpus search (`/`), inspect personalized recommendations (`/recommend`), browse `Starred` papers (`/starred`), toggle `中 / EN` or Light/Dark mode, or generate a new daily report (`+ Generate`).
 
-For running the web UI as a background macOS service, see [docs/launchagent-setup.md](docs/launchagent-setup.md).
+To run the web UI and weekday auto-generation as background macOS LaunchAgents, see [docs/launchagent-setup.md](docs/launchagent-setup.md).
+
+### CLI Tools
+
+```bash
+# Generate today's digest (or a specific historical date)
+python report.py
+python report.py --date 2026-11-13
+
+# Corpus bootstrap, search, similarity, recommendations & zero-LLM re-render
+python sanity.py bootstrap --rerender
+python sanity.py stats
+python sanity.py search "EP240414a"
+python sanity.py search "磁星" --topic grb --days 90
+python sanity.py similar 2611.12945
+python sanity.py recommend --days 30
+python sanity.py rerender
+python sanity.py migrate-topics
+
+# Citation counts (NASA SciX / ADS or INSPIRE-HEP)
+python citations.py status
+python citations.py refresh --days 30 --rerender
+python citations.py top -n 10
+```
+
+### Sharing & Static Publishing
+
+Two built-in modes let collaborators browse reports safely without exposing your Obsidian vault or overwriting your personal stars:
+
+1. **LAN Group Server (Read-only Visitors + Owner Unlock)**:
+   ```bash
+   UI_TOKEN="your-owner-token" ALLOWED_NETS="127.0.0.0/8,192.168.0.0/16" \
+     uvicorn server:app --host 0.0.0.0 --port 8080
+   ```
+   Non-loopback visitors automatically get read-only browsing plus isolated browser-local `localStorage` stars and recommendations; you can unlock owner controls (`+ Generate`, server-side `Starred`, `Save to Obsidian`) via `/unlock`.
+2. **Privacy-Safe Static Site (`./dist/site`)**:
+   ```bash
+   python build_site.py --out ./dist/site
+   python -m http.server -d ./dist/site 8090
+   ```
+   Exports standalone daily digests, rollups, `starred.html`, and a client-side `search_index.json` SPA with zero server dependency and without including `paper_state.json`, SQLite DBs, or Obsidian notes.
 
 ## Development
 
 ```bash
-pytest tests/        # 31 route + helper tests, < 2 s
-ruff check .         # lint
-ruff format .        # format in place
+ruff format .
+ruff check .
+pytest -v
 ```
-
-Tests cover the FastAPI shim layer (route handlers, the background `_worker`, the SSE generator). The `core/` package is exercised by the production runs that have built up `reports/`.
-
-## Output Structure
-
-The HTML report contains two sections:
-
-1. **Topic Index** — papers grouped by research area, with reference numbers
-2. **Paper Details** — for each paper: bilingual title (English + Chinese), authors, method tag (`Observation` / `Simulation` / `Theory` / `Modeling`), and a concise Chinese description of the physical results
 
 ## Notes
 
-- arXiv does not publish new submissions on weekends; running on Saturday or Sunday will return no results
-- On Mondays, the script automatically retrieves papers from the preceding Friday to account for the weekend gap
-- The "Save to Obsidian" button writes `.md` notes via `/api/obsidian/save` into `OBSIDIAN_VAULT_PATH/OBSIDIAN_ARXIV_FOLDER` without overwriting existing note bodies or deleting files when unmarked
+- arXiv does not announce new papers on weekends; Monday runs automatically cover the weekend window starting Friday.
+- `Save to Obsidian` writes formatted `.md` files into `OBSIDIAN_VAULT_PATH/OBSIDIAN_ARXIV_FOLDER`, preserves existing note bodies, and never deletes files when unmarked in the UI.
 
 ## License
 

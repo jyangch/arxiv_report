@@ -26,21 +26,23 @@ ARXIV_CACHE_DIR = './reports/.cache'
 ARXIV_COOLDOWN_PATH = './reports/.cache/arxiv_api_cooldown'
 ARXIV_COOLDOWN_SECONDS = 30 * 60  # after a 429, skip the api for 30 minutes
 
-# Federal holidays arXiv actually defers announcements for. The `holidays`
-# library's US set also includes Washington's Birthday, Memorial Day, Columbus
-# Day, and Veterans Day, which arXiv does NOT observe -- so lookups are filtered
-# to this allowlist. Names match the holidays library's US labels (with any
-# `(observed)` suffix stripped). arXiv's ad-hoc year-end closures (e.g. Dec 29)
-# are not derivable from the library and are intentionally not modelled.
-_ARXIV_OBSERVED_HOLIDAYS = frozenset({
-    "New Year's Day",
-    'Martin Luther King Jr. Day',
-    'Juneteenth National Independence Day',
-    'Independence Day',
-    'Labor Day',
-    'Thanksgiving Day',
-    'Christmas Day',
-})
+# Prior to Fall 2026, arXiv ignored Washington's Birthday and Memorial Day;
+# starting October 2026 (and for all of 2027+), info.arxiv.org/help/availability.html
+# lists every weekday US federal holiday in `holidays.US`. Ad-hoc closures (e.g.
+# maintenance or unscheduled year-end days) are caught once the next listing lands
+# on pastweek.
+_PRE_FALL_2026_HOLIDAYS = frozenset(
+    {
+        "New Year's Day",
+        'Martin Luther King Jr. Day',
+        'Juneteenth National Independence Day',
+        'Independence Day',
+        'Labor Day',
+        'Thanksgiving Day',
+        'Christmas Day',
+    }
+)
+_FULL_FEDERAL_HOLIDAYS_FROM = datetime.date(2026, 10, 1)
 
 # Abs-page metadata extraction patterns (see arxiv.org/abs/<id> markup).
 _ARXIV_ID_RE = re.compile(r'/abs/([^/?#]+?)(?:v\d+)?/?(?:[?#]|$)')
@@ -120,32 +122,68 @@ def get_arxiv_sync_window(
 
 
 def _arxiv_holiday_name(day: datetime.date) -> str | None:
-    """Return the arXiv-observed holiday name for ``day``, or ``None``.
+    """Return the arXiv-observed weekday holiday name for ``day``, or ``None``.
 
-    Wraps ``holidays.US`` but filters to the federal holidays arXiv actually
-    closes for (``_ARXIV_OBSERVED_HOLIDAYS``); other US holidays such as
-    Memorial Day return ``None`` because arXiv still announces on them.
+    Per ``info.arxiv.org/help/availability.html``, arXiv observes weekday US
+    federal holidays (including Friday/Monday ``(observed)`` shifts for weekend
+    holidays). Prior to October 2026, Washington's Birthday and Memorial Day
+    were not observed.
 
     Args:
         day: Calendar date to classify.
 
     Returns:
         The holiday name (possibly with an ``(observed)`` suffix) when arXiv
-        defers announcements that day, else ``None``.
+        staff are offline for a holiday on ``day``, else ``None``.
     """
+    if day.weekday() >= 5:
+        return None
     name = holidays.US(years=day.year).get(day)
-    if name and name.removesuffix(' (observed)') in _ARXIV_OBSERVED_HOLIDAYS:
-        return name
-    return None
+    if not name:
+        return None
+    if (
+        day < _FULL_FEDERAL_HOLIDAYS_FROM
+        and name.removesuffix(' (observed)') not in _PRE_FALL_2026_HOLIDAYS
+    ):
+        return None
+    return name
+
+
+def _deferred_by_holiday(day: datetime.date) -> tuple[datetime.date, str] | None:
+    """Return ``(holiday_date, holiday_name)`` if ``day``'s listing was deferred.
+
+    Each Mon-Fri listing is prepared on the preceding business day (Friday for
+    Monday's Sunday-20:00-ET mailing; Mon-Thu for Tue-Fri's 20:00-ET mailings).
+    When arXiv observes a holiday on that preceding business day, no mailing
+    goes out that evening and no listing dated ``day`` is published -- whereas
+    a listing dated on the holiday itself was already mailed the night before.
+    """
+    if day.weekday() >= 5:
+        return None
+    prep_day = day - timedelta(days=3 if day.weekday() == 0 else 1)
+    holiday = _arxiv_holiday_name(prep_day)
+    return (prep_day, holiday) if holiday else None
+
+
+def _all_weekdays_holiday_deferred(after: datetime.date, through: datetime.date) -> bool:
+    """Return True if ``(after, through]`` has >=1 weekday and all are holiday-deferred."""
+    found = False
+    cur = after + timedelta(days=1)
+    while cur <= through:
+        if cur.weekday() < 5:
+            if _deferred_by_holiday(cur) is None:
+                return False
+            found = True
+        cur += timedelta(days=1)
+    return found
 
 
 def describe_empty_window(as_of: datetime.datetime | None = None) -> str:
     """Explain why the announcement date for ``as_of`` yielded no papers.
 
-    Classifies the announcement day (``as_of`` in ET) as a weekend, a known
-    arXiv holiday, or an unexpected weekday miss. Papers are queried by
-    submission window, so a real holiday still has submissions to announce;
-    an empty weekday result almost always means a transient fetch issue.
+    Classifies the announcement day (``as_of`` in ET) as a weekend, a listing
+    deferred by an arXiv holiday on the preceding business day, an ad-hoc
+    skipped listing, or an unexpected weekday miss.
 
     Args:
         as_of: Reference timestamp; defaults to ``now`` in the Eastern timezone.
@@ -160,9 +198,14 @@ def describe_empty_window(as_of: datetime.datetime | None = None) -> str:
             f'{day:%A} {day:%Y-%m-%d} has no arXiv listing -- arXiv announces '
             'Sun-Thu 20:00 ET, so listings are dated Mon-Fri and never Sat/Sun.'
         )
-    holiday = _arxiv_holiday_name(day)
-    if holiday:
-        return f'{day:%Y-%m-%d} is {holiday}; arXiv defers announcements on this holiday.'
+    deferred = _deferred_by_holiday(day)
+    if deferred:
+        holiday_day, holiday_name = deferred
+        return (
+            f'arXiv published no listing dated {day:%Y-%m-%d} -- arXiv observed '
+            f'{holiday_name} ({holiday_day:%Y-%m-%d}) and deferred submissions '
+            'to the next announcement.'
+        )
     if _listing_state(day, _fetch_listings()) == 'skipped':
         return (
             f'arXiv published no listing dated {day:%Y-%m-%d}; its submissions were '
@@ -331,14 +374,18 @@ def _listing_state(day: datetime.date, listings: dict | None) -> str:
 
     Returns ``'listed'`` (an announcement dated ``day`` exists), ``'pending'``
     (newer than the latest announcement, i.e. not out yet), ``'skipped'``
-    (inside the covered range but arXiv published nothing dated ``day``) or
-    ``'unknown'`` (page unavailable, or ``day`` older than the page covers).
+    (inside the covered range or holiday-deferred right after the latest
+    announcement, so arXiv published nothing dated ``day``) or ``'unknown'``
+    (page unavailable, or ``day`` older than the page covers).
     """
     if not listings:
         return 'unknown'
     if day in listings:
         return 'listed'
-    if day > max(listings):
+    latest = max(listings)
+    if day > latest:
+        if _all_weekdays_holiday_deferred(latest, day):
+            return 'skipped'
         return 'pending'
     if day > min(listings):
         return 'skipped'
@@ -459,9 +506,7 @@ def _fetch_via_api(start_t: datetime.datetime, end_t: datetime.datetime) -> list
     return papers
 
 
-def _fetch_via_rss(
-    start_t: datetime.datetime, end_t: datetime.datetime
-) -> list[dict]:
+def _fetch_via_rss(start_t: datetime.datetime, end_t: datetime.datetime) -> list[dict]:
     """Fetch astro-ph.HE RSS papers and filter to the ``[start_t, end_t)`` window.
 
     The RSS endpoint is far less rate-limited than the query API but exposes

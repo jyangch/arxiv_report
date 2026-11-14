@@ -26,6 +26,42 @@ def _extract_journal_from_comment(comment: str) -> str:
     return m.group(1).strip().rstrip('.') if m else ''
 
 
+_STATUS_WORD_EN = {
+    '已发表': 'Published',
+    '已接收': 'Accepted',
+    '已投稿': 'Submitted',
+}
+
+
+def normalize_status_label(label: str) -> str:
+    """Normalize legacy Chinese status labels into English equivalents.
+
+    Args:
+        label: Raw badge string containing a legacy non-English status marker.
+
+    Returns:
+        Normalized English badge label, or ``''`` when input is empty.
+    """
+    raw = (label or '').strip()
+    if not raw:
+        return ''
+    for zh, en in _STATUS_WORD_EN.items():
+        if raw == zh:
+            return en
+        m_prefix = re.match(rf'^{zh}\s*\((.+)\)$', raw)
+        if m_prefix:
+            journal = m_prefix.group(1).strip()
+            return f'{en} ({journal})' if journal else en
+        m_suffix = re.match(rf'^(.+?)\s+{zh}$', raw)
+        if m_suffix:
+            journal = m_suffix.group(1).strip()
+            return f'{en} ({journal})' if journal else en
+        if raw.startswith(zh + ' '):
+            rest = raw[len(zh) :].strip()
+            return f'{en} ({rest})' if rest else en
+    return raw
+
+
 def classify_pub_status(comment: str, journal_ref: str, doi: str) -> tuple[str, str]:
     """Infer publication status from arXiv metadata fields.
 
@@ -45,11 +81,11 @@ def classify_pub_status(comment: str, journal_ref: str, doi: str) -> tuple[str, 
     Returns:
         A pair ``(status_class, label)`` where ``status_class`` is one of
         ``'published'``, ``'accepted'``, ``'submitted'``, ``'preprint'`` and
-        ``label`` is the rendered Chinese tag (empty for preprint).
+        ``label`` is the rendered English tag (empty for preprint).
     """
     if journal_ref:
         journal = _extract_journal_short(journal_ref)
-        return ('published', f'已发表 ({journal})' if journal else '已发表')
+        return ('published', f'Published ({journal})' if journal else 'Published')
 
     cl = (comment or '').lower()
     journal_in_comment = _extract_journal_from_comment(comment)
@@ -58,11 +94,11 @@ def classify_pub_status(comment: str, journal_ref: str, doi: str) -> tuple[str, 
         return f'{text} ({journal_in_comment})' if journal_in_comment else text
 
     if 'accepted' in cl or 'in press' in cl:
-        return ('accepted', _wrap('已接收'))
+        return ('accepted', _wrap('Accepted'))
     if 'published' in cl:
-        return ('published', _wrap('已发表'))
+        return ('published', _wrap('Published'))
     if 'submitted' in cl:
-        return ('submitted', _wrap('已投稿'))
+        return ('submitted', _wrap('Submitted'))
     if doi:
-        return ('accepted', '已接收')
+        return ('accepted', 'Accepted')
     return ('preprint', '')

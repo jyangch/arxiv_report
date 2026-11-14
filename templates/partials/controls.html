@@ -1,37 +1,51 @@
-{% set today_iso = selected_date.isoformat() if selected_date else '' %}
-{% if cooldown_remaining > 0 %}
+{% set default_gen_iso = today_et or (selected_date.isoformat() if selected_date else '') %}
+{% if can_write is defined and not can_write %}
+  <div class="subbar-readonly">
+    <span class="readonly-pill" title="Visitor read-only mode: stars stay in your browser localStorage">Read-only</span>
+    {% if token_configured %}
+      <a class="subbar-unlock-link" href="/unlock">Unlock owner &rarr;</a>
+    {% endif %}
+  </div>
+{% elif cooldown_remaining > 0 %}
   {% set mins = (cooldown_remaining + 59) // 60 %}
-  <form id="generate-form" aria-disabled="true">
-    <label for="date-input">Date (ET)</label>
-    <input id="date-input"
-           type="date"
-           name="date"
-           value="{{ today_iso }}"
-           disabled />
-    <button type="button" class="btn-primary" disabled
-            title="arXiv API is rate-limited; Generate is paused.">
-      <span>Rate-limited &middot; retry in ~{{ mins }} min</span>
-    </button>
-  </form>
-  <p class="cooldown-hint">
-    arXiv API returned HTTP 429. The button will reactivate automatically once
-    the cooldown expires.
-  </p>
+  <div class="subbar-controls">
+    <span class="cooldown-pill" title="arXiv API rate-limited; retry shortly">Rate-limited · ~{{ mins }} min</span>
+  </div>
 {% else %}
-  <form id="generate-form"
-        hx-post="/generate"
-        hx-target="#main-area"
-        hx-swap="innerHTML"
-        hx-disabled-elt="find button">
-    <label for="date-input">Date (ET)</label>
-    <input id="date-input"
-           type="date"
-           name="date"
-           value="{{ today_iso }}"
-           required />
-    <button type="submit" class="btn-primary">
-      <span>Generate report</span>
-      <span class="btn-arrow" aria-hidden="true">&rarr;</span>
-    </button>
-  </form>
+  <div class="subbar-controls">
+    <details id="gen-details" class="gen-popover">
+      <summary class="btn-generate-toggle" title="Generate a daily digest">
+        <span>+ Generate</span>
+      </summary>
+      <div class="gen-popover-card">
+        <form id="generate-form"
+              class="inline-generate-form"
+              hx-post="/generate"
+              hx-target="#main-area"
+              hx-swap="innerHTML"
+              hx-disabled-elt="find button">
+          <label class="gen-field-label" for="date-input">Target date (US/Eastern)</label>
+          <div class="gen-input-row">
+            <input id="date-input"
+                   type="date"
+                   name="date"
+                   value="{{ default_gen_iso }}"
+                   aria-label="Report date (ET)"
+                   required />
+            <input type="hidden" id="generate-force-input" name="force" value="" />
+            <button type="submit" class="btn-generate">
+              <span>Run</span>
+              <span class="btn-arrow" aria-hidden="true">&rarr;</span>
+            </button>
+          </div>
+          <div id="gen-date-hint" class="gen-date-hint" hidden></div>
+        </form>
+      </div>
+    </details>
+    {% if token_configured %}
+      <form class="lock-inline-form" action="/lock" method="post">
+        <button type="submit" class="lock-inline-btn" title="Lock owner session">Lock</button>
+      </form>
+    {% endif %}
+  </div>
 {% endif %}

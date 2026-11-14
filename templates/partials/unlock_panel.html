@@ -1,0 +1,23 @@
+<div class="corpus-page">
+  <div class="unlock-card">
+    <p class="status-kicker">Owner Session</p>
+    <h2>Unlock Write Access</h2>
+    {% if can_write %}
+      <p>Owner write access is currently active in this browser session.</p>
+      <form action="/lock" method="post">
+        <button type="submit" class="btn-primary">Lock session</button>
+      </form>
+    {% elif not token_configured %}
+      <p><code>UI_TOKEN</code> is not set on this server, so owner writes are only permitted from <code>localhost</code>.</p>
+    {% else %}
+      <p>Enter the server <code>UI_TOKEN</code> to enable report generation, Obsidian note saving, and server-side star sync.</p>
+      {% if error %}
+        <p class="unlock-error">{{ error }}</p>
+      {% endif %}
+      <form class="unlock-form" action="/unlock" method="post">
+        <input type="password" name="token" placeholder="Owner UI_TOKEN" required autofocus />
+        <button type="submit" class="btn-primary">Unlock</button>
+      </form>
+    {% endif %}
+  </div>
+</div>

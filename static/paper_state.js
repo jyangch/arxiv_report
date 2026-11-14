@@ -4,6 +4,7 @@
     var PREFIX = 'arxiv-report:';
     var MIGRATED_KEY = 'arxiv-report-sync:migrated';
     var UNMARKED_PREFIX = 'arxiv-report-obsidian-unmarked:';
+    var CAN_WRITE = window.__ARXIV_CAN_WRITE__ !== false;
     var ENDPOINT = '/api/paper-state';
     var OBSIDIAN_SAVE_ENDPOINT = '/api/obsidian/save';
     var OBSIDIAN_SAVED_ENDPOINT = '/api/obsidian/saved';
@@ -67,20 +68,24 @@
     }
 
     var server = null;
-    try {
-        server = pullJsonSync(ENDPOINT);
-    } catch (err) {
-        console.warn('paper state pull failed; using browser state only', err);
+    if (CAN_WRITE) {
+        try {
+            server = pullJsonSync(ENDPOINT);
+        } catch (err) {
+            console.warn('paper state pull failed; using browser state only', err);
+        }
     }
 
     var savedObsidianIds = [];
-    try {
-        var savedPayload = pullJsonSync(OBSIDIAN_SAVED_ENDPOINT);
-        if (savedPayload && Array.isArray(savedPayload.arxiv_ids)) {
-            savedObsidianIds = savedPayload.arxiv_ids;
+    if (CAN_WRITE) {
+        try {
+            var savedPayload = pullJsonSync(OBSIDIAN_SAVED_ENDPOINT);
+            if (savedPayload && Array.isArray(savedPayload.arxiv_ids)) {
+                savedObsidianIds = savedPayload.arxiv_ids;
+            }
+        } catch (err) {
+            console.warn('obsidian saved-id pull failed', err);
         }
-    } catch (err) {
-        console.warn('obsidian saved-id pull failed', err);
     }
     window.__OBSIDIAN_SAVED_IDS__ = savedObsidianIds;
 
@@ -106,7 +111,7 @@
 
     proto.setItem = function(key, value) {
         rawSetItem.call(this, key, value);
-        if (this !== storage || typeof key !== 'string' || key.indexOf(PREFIX) !== 0) return;
+        if (!CAN_WRITE || this !== storage || typeof key !== 'string' || key.indexOf(PREFIX) !== 0) return;
         var items = {};
         if (isFlagKey(key)) {
             if (String(value) !== '1') {
@@ -125,7 +130,7 @@
 
     proto.removeItem = function(key) {
         rawRemoveItem.call(this, key);
-        if (this === storage && typeof key === 'string' && isFlagKey(key)) post({}, [key]);
+        if (CAN_WRITE && this === storage && typeof key === 'string' && isFlagKey(key)) post({}, [key]);
     };
 
     // --- Legacy historical report takeover (.craft-save-btn -> Save to Obsidian) ---
@@ -232,7 +237,7 @@
     function formatObsidianMarkdown(data, note) {
         var arxivId = String(data.arxivId || '').trim();
         var url = String(data.url || '').trim();
-        var titleEn = String(data.titleEn || '').trim() || '未记录';
+        var titleEn = String(data.titleEn || '').trim() || 'Unknown';
         var authorsRaw = String(data.authors || '').trim();
         var methodParts = extractMethodParts(data.method, data.methodTag);
         var noteText = String(note || '').trim();
@@ -240,9 +245,9 @@
         var lines = [
             titleEn,
             '',
-            '[arXiv:' + (arxivId || '未记录') + '](' + url + ')',
+            '[arXiv:' + (arxivId || 'Unknown') + '](' + url + ')',
             '',
-            '**作者：** ' + (authorsRaw || '未记录'),
+            '**作者：** ' + (authorsRaw || 'Unknown'),
             ''
         ];
         var analysis = [];
@@ -292,6 +297,10 @@
     function installLegacyTakeover() {
         var legacyButtons = document.querySelectorAll('.craft-save-btn');
         if (!legacyButtons.length) return;
+        if (!CAN_WRITE) {
+            legacyButtons.forEach(function(btn) { btn.style.display = 'none'; });
+            return;
+        }
         injectLegacyObsidianStyles();
         document.querySelectorAll('.paper-item').forEach(syncLegacyCard);
         document.addEventListener('paper-state-change', function() {
@@ -316,7 +325,7 @@
                     document.dispatchEvent(new CustomEvent('paper-state-change'));
                     return;
                 }
-                var note = prompt('个人备注（可选）：');
+                var note = prompt('Optional personal note:');
                 if (note === null) return;
                 fetch(OBSIDIAN_SAVE_ENDPOINT, {
                     method: 'POST',
@@ -358,7 +367,7 @@
                     }, 1600);
                 }).catch(function(err) {
                     console.error('Failed to save Obsidian note', err);
-                    alert('Obsidian 保存失败：' + err.message);
+                    alert('Failed to save to Obsidian: ' + err.message);
                 });
                 return;
             }
@@ -369,7 +378,7 @@
                 if (!card || !card.querySelector('.craft-save-btn')) return;
                 e.preventDefault();
                 e.stopImmediatePropagation();
-                var copyNote = prompt('个人备注（可选）：');
+                var copyNote = prompt('Optional personal note:');
                 if (copyNote === null) return;
                 copyWithFeedback(formatObsidianMarkdown(scrapeCardData(card), copyNote), copyBtn);
             }
