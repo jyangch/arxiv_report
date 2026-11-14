@@ -539,7 +539,7 @@ def collect_owner_positives(
             state_obsidian.add(pid)
 
     vault_ids = obsidian.list_saved_arxiv_ids(
-        vault_path or OBSIDIAN_VAULT_PATH,
+        OBSIDIAN_VAULT_PATH if vault_path is None else vault_path,
         folder_name or OBSIDIAN_ARXIV_FOLDER,
     )
     obsidian_all = state_obsidian | {bare_arxiv_id(x) for x in vault_ids if bare_arxiv_id(x)}

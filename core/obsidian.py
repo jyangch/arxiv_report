@@ -204,7 +204,10 @@ def save_obsidian_note(
     if not clean_id:
         raise ValueError('arxiv_id must not be empty')
 
-    folder_path = os.path.join(vault_path, folder_name)
+    clean_vault = os.path.expanduser(vault_path or '').strip()
+    if not clean_vault:
+        raise ValueError('OBSIDIAN_VAULT_PATH is not configured')
+    folder_path = os.path.join(clean_vault, folder_name)
     markdown = render_obsidian_markdown(payload)
 
     with _lock:
@@ -252,7 +255,10 @@ def list_saved_arxiv_ids(vault_path: str, folder_name: str) -> list[str]:
     Returns:
         Sorted list of unique arXiv identifier strings found on disk.
     """
-    folder_path = os.path.join(vault_path, folder_name)
+    clean_vault = os.path.expanduser(vault_path or '').strip()
+    if not clean_vault:
+        return []
+    folder_path = os.path.join(clean_vault, folder_name)
     try:
         names = os.listdir(folder_path)
     except OSError:

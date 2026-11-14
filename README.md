@@ -46,8 +46,6 @@ Automatically fetches new papers from arXiv `astro-ph.HE` (High Energy Astrophys
 │   └── topics.py          16-topic canonical ontology + light/dark chip palette
 ├── templates/             Jinja2 base shell (`base.html`, `home.html`) and HTMX partials
 ├── static/                `style.css`, `ui_shell.js` (topbar/calendar/generate/lang), `paper_state.js`
-├── docs/                  Setup and coding guides (`launchagent-setup.md`, `docstring-standard.md`)
-├── tests/                 Pytest suite (35 tests across 10 test modules, gitignored)
 └── reports/               Generated HTML digests, `fragments/`, `paper_state.json`, `.data/` (gitignored)
 ```
 
@@ -61,7 +59,7 @@ For the default Gemini CLI backend, install the Antigravity CLI (`agy`) and auth
 
 ## Configuration
 
-All settings are configured via environment variables (sensible defaults are provided in `core/config.py`):
+All settings are configured via environment variables (or a gitignored `.env` file in the project root; defaults are provided in `core/config.py`):
 
 | Variable | Description | Default |
 |---|---|---|
@@ -79,7 +77,7 @@ All settings are configured via environment variables (sensible defaults are pro
 | `CLAUDE_BACKEND` | `cli` (Claude Code) or `api` (Anthropic SDK) | `cli` |
 | `CLAUDE_API_KEY` | Anthropic Claude API key (when `CLAUDE_BACKEND=api`) | `—` |
 | `CLAUDE_MODEL` | Claude model name (API backend) | `claude-opus-4-6` |
-| `OBSIDIAN_VAULT_PATH` | Local Obsidian vault root path | `/Users/junyang/Documents/Obsidian/astro` |
+| `OBSIDIAN_VAULT_PATH` | Local Obsidian vault root path for `Save to Obsidian` | `—` |
 | `OBSIDIAN_ARXIV_FOLDER` | Target subfolder inside Obsidian vault | `Arxiv-Notes` |
 | `ARXIV_DATA_DIR` | Directory for `papers.db` and `features.pkl` | `./reports/.data` |
 | `ALLOWED_NETS` | Comma-separated IP/CIDR allowlist for incoming requests | `—` |
@@ -98,8 +96,6 @@ uvicorn server:app --port 8080
 ```
 
 Open <http://localhost:8080> to jump to the latest digest on disk. Use the top bar to switch between `Day / Week / Month / Year` views, open the calendar picker, run full-corpus search (`/`), inspect personalized recommendations (`/recommend`), browse `Starred` papers (`/starred`), toggle `中 / EN` or Light/Dark mode, or generate a new daily report (`+ Generate`).
-
-To run the web UI and weekday auto-generation as background macOS LaunchAgents, see [docs/launchagent-setup.md](docs/launchagent-setup.md).
 
 ### CLI Tools
 
